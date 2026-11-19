@@ -46,6 +46,22 @@ def test_batches_for_peer_uses_independent_watermarks() -> None:
     assert [batch.seq for batch in node.batches_for_peer(3)] == [1, 2, 3, 4, 5]
 
 
+def test_batches_for_peer_fairly_interleaves_origins() -> None:
+    node = GossipNode(drone_id=1, belief=BeliefGrid(10, prior=0.1))
+    for seq in range(1, 6):
+        for origin_id in (1, 2, 3, 4):
+            node.record_local(_make_batch(origin_id, seq, [seq % 10]))
+
+    batches = node.batches_for_peer(4, max_batches=10)
+
+    assert [(batch.drone_id, batch.seq) for batch in batches] == [
+        (1, 1), (2, 1), (3, 1),
+        (1, 2), (2, 2), (3, 2),
+        (1, 3), (2, 3), (3, 3),
+        (1, 4),
+    ]
+
+
 def test_acknowledged_batches_are_not_retransmitted() -> None:
     rng = RNGManager(11).spawn("net")[0]
     net = make_network(NetworkConfig(), "clean", rng)
@@ -112,15 +128,16 @@ def test_partition_reconvergence_under_5s() -> None:
     assert swarm.max_divergence() > 1e-4
     t_heal = 5.0
     converged_at = None
+    recovery_seq = 50
     for step in range(50, 120):
         t = step * dt
         swarm.tick(t)
         swarm.retransmit(t)
         if step % 5 == 0:
+            recovery_seq += 1
             for drone_id in ids:
-                seq = step + 1
                 swarm.publish(
-                    _make_batch(drone_id, seq, [(drone_id + step) % n_cells]),
+                    _make_batch(drone_id, recovery_seq, [(drone_id + step) % n_cells]),
                     t=t,
                 )
         if swarm.all_converged(tol=1e-5):
