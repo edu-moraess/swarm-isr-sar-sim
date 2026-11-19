@@ -109,7 +109,7 @@ def build_world(
     used = set(tgt_cells.tolist())
     for i, c in enumerate(tgt_cells):
         x, y = _idx_to_xy(c, w, cell_m, origin)
-        targets.append(Target(id=i, cell_idx=int(c), position=Point(x=x, y=y, z=0.0)))
+        targets.append(Target(id=i, cell_idx=int(c), position=Point(x=x, y=y, z=0.0))
 
     remaining = [i for i in free if i not in used]
     n_clut = min(tgt_cfg.clutter, len(remaining))
@@ -119,7 +119,7 @@ def build_world(
     clutter: list[Clutter] = []
     for i, c in enumerate(clut_cells):
         x, y = _idx_to_xy(int(c), w, cell_m, origin)
-        clutter.append(Clutter(id=i, cell_idx=int(c), position=Point(x=x, y=y, z=0.0))
+        clutter.append(Clutter(id=i, cell_idx=int(c), position=Point(x=x, y=y, z=0.0)))
 
     wind = rng.normal(0, 0.3, size=2)
 
