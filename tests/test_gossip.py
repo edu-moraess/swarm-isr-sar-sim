@@ -128,3 +128,23 @@ def test_partition_reconvergence_under_5s() -> None:
             break
     assert converged_at is not None, f"no convergence, div={swarm.max_divergence()}"
     assert converged_at < 5.0, f"reconvergence took {converged_at:.2f}s >= 5s"
+
+def test_retransmit_recovers_after_packet_loss() -> None:
+    rng = RNGManager(19).spawn("net")[0]
+    net = make_network(NetworkConfig(), "clean", rng)
+    swarm = make_gossip_swarm([1, 2], n_cells=10, net=net)
+    batch = _make_batch(1, 1, [0, 1])
+
+    net.profile.loss_pct = 100.0
+    swarm.publish(batch, t=0.0)
+    swarm.tick(1.0)
+    assert swarm.nodes[2].applied_hwm.get(1, 0) == 0
+
+    net.profile.loss_pct = 0.0
+    assert swarm.retransmit(1.0) == 1
+    swarm.tick(2.0)
+    swarm.tick(3.0)
+
+    assert swarm.nodes[2].applied_hwm[1] == 1
+    assert swarm.nodes[1].peer_watermarks[2][1] == 1
+    assert swarm.retransmit(3.0) == 0
