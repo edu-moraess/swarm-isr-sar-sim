@@ -1,4 +1,4 @@
-"""Bayesian log-odds occupancy / target belief grid with idempotent fusion."""
+"""Bayesian log-odds target belief grid with watermark dedup and vectorized updates."""
 
 from __future__ import annotations
 
@@ -23,39 +23,49 @@ def sigmoid(log_odds: float) -> float:
 
 
 class BeliefGrid:
-    """Per-cell log-odds. Prior uniform → log-odds = 0 (p=0.5) or low prior."""
+    """Per-cell log-odds belief.
+
+    Deduplication uses a per-drone watermark: only observations with
+    sequence number strictly greater than the last accepted for that
+    drone are applied.
+    """
 
     def __init__(self, n_cells: int, prior: float = 0.1) -> None:
         self.n_cells = n_cells
         self.log_odds = np.full(n_cells, logit(prior), dtype=np.float64)
-        self._seen_obs: set[tuple[int, float, int]] = set()
+        self._watermark: dict[int, float] = {}
 
     def p(self, idx: int) -> float:
-        return sigmoid(float(self.log_odds[idx]))
+        return float(sigmoid(float(self.log_odds[idx])))
 
     def probabilities(self) -> np.ndarray:
-        return np.array([sigmoid(float(lo)) for lo in self.log_odds])
+        lo = self.log_odds
+        pos = lo >= 0
+        out = np.empty_like(lo)
+        out[pos] = 1.0 / (1.0 + np.exp(-lo[pos]))
+        exp_lo = np.exp(lo[~pos])
+        out[~pos] = exp_lo / (1.0 + exp_lo)
+        return out
 
     def update(self, obs: Observation) -> None:
-        """Idempotent Bayesian update. Ignores duplicate obs_id."""
-        if obs.obs_id in self._seen_obs:
+        drone_id = obs.obs_id[0]
+        seq = obs.obs_id[1]
+        last = self._watermark.get(drone_id, -1.0)
+        if seq <= last:
             return
-        self._seen_obs.add(obs.obs_id)
+        self._watermark[drone_id] = seq
 
         s = obs.sensitivity
         f = obs.false_alarm
-        p = self.p(obs.cell_idx)
-
         if obs.detected:
-            num = s * p
-            den = num + f * (1.0 - p)
-            p_new = num / den if den > 0 else p
+            if f <= 0:
+                delta = 10.0
+            else:
+                delta = math.log(max(s, 1e-9) / max(f, 1e-9))
         else:
-            num = (1.0 - s) * p
-            den = num + (1.0 - f) * (1.0 - p)
-            p_new = num / den if den > 0 else p
+            delta = math.log(max(1.0 - s, 1e-9) / max(1.0 - f, 1e-9))
 
-        self.log_odds[obs.cell_idx] = logit(p_new)
+        self.log_odds[obs.cell_idx] += delta
 
     def fuse(self, observations: Iterable[Observation]) -> None:
         for o in observations:
@@ -76,11 +86,10 @@ class BeliefGrid:
     def copy(self) -> BeliefGrid:
         b = BeliefGrid(self.n_cells)
         b.log_odds = self.log_odds.copy()
-        b._seen_obs = set(self._seen_obs)
+        b._watermark = dict(self._watermark)
         return b
 
     def max_divergence(self, other: BeliefGrid) -> float:
-        """Max absolute difference in probability (for convergence tests)."""
         return float(np.max(np.abs(self.probabilities() - other.probabilities())))
 
 
@@ -89,7 +98,6 @@ def sector_priority(
     cells: list[int],
     lambda_h: float = 0.5,
 ) -> float:
-    """priority = mean(p) * (1 + λ * mean(H))."""
     if not cells:
         return 0.0
     ps = [belief.p(i) for i in cells]

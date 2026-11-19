@@ -41,7 +41,7 @@ class World:
     height: int
     cell_m: float
     origin: Point
-    grid: np.ndarray  # CellState
+    grid: np.ndarray
     targets: list[Target] = field(default_factory=list)
     clutter: list[Clutter] = field(default_factory=list)
     wind: np.ndarray = field(default_factory=lambda: np.zeros(2))
@@ -72,7 +72,6 @@ class World:
         return [i for i in range(self.n_cells) if self.is_free(i)]
 
     def update_wind(self, dt: float, sigma: float = 0.5) -> None:
-        """Constant wind + AR(1) gust."""
         if self.rng is None:
             return
         self.gust_ar1 = 0.9 * self.gust_ar1 + self.rng.normal(0, sigma * np.sqrt(dt))
@@ -81,12 +80,18 @@ class World:
         return self.wind + np.array([self.gust_ar1, 0.0])
 
 
+def _idx_to_xy(idx: int, width: int, cell_m: float, origin: Point) -> tuple[float, float]:
+    row, col = divmod(idx, width)
+    x = origin.x + (col + 0.5) * cell_m
+    y = origin.y + (row + 0.5) * cell_m
+    return x, y
+
+
 def build_world(
     mission: MissionConfig,
     rng: Generator,
     obstacle_fraction: float = 0.05,
 ) -> World:
-    """Create a deterministic world from mission config and RNG stream."""
     area = mission.area
     cell_m = area.cell_m
     w = int(area.size_m[0] / cell_m)
@@ -106,20 +111,24 @@ def build_world(
     n_tgt = min(tgt_cfg.count, len(free))
     tgt_cells = rng.choice(free, size=n_tgt, replace=False)
     targets: list[Target] = []
-    used = set(tgt_cells.tolist())
+    used: set[int] = set()
     for i, c in enumerate(tgt_cells):
-        x, y = _idx_to_xy(c, w, cell_m, origin)
-        targets.append(Target(id=i, cell_idx=int(c), position=Point(x=x, y=y, z=0.0))
+        ci = int(c)
+        used.add(ci)
+        x, y = _idx_to_xy(ci, w, cell_m, origin)
+        targets.append(Target(id=i, cell_idx=ci, position=Point(x=x, y=y, z=0.0)))
 
     remaining = [i for i in free if i not in used]
     n_clut = min(tgt_cfg.clutter, len(remaining))
     clut_cells: list[int] = (
-        list(rng.choice(remaining, size=n_clut, replace=False)) if n_clut else []
+        [int(x) for x in rng.choice(remaining, size=n_clut, replace=False)]
+        if n_clut
+        else []
     )
     clutter: list[Clutter] = []
     for i, c in enumerate(clut_cells):
-        x, y = _idx_to_xy(int(c), w, cell_m, origin)
-        clutter.append(Clutter(id=i, cell_idx=int(c), position=Point(x=x, y=y, z=0.0)))
+        x, y = _idx_to_xy(c, w, cell_m, origin)
+        clutter.append(Clutter(id=i, cell_idx=c, position=Point(x=x, y=y, z=0.0)))
 
     wind = rng.normal(0, 0.3, size=2)
 
@@ -134,10 +143,3 @@ def build_world(
         wind=wind,
         rng=rng,
     )
-
-
-def _idx_to_xy(idx: int, width: int, cell_m: float, origin: Point) -> tuple[float, float]:
-    row, col = divmod(idx, width)
-    x = origin.x + (col + 0.5) * cell_m
-    y = origin.y + (row + 0.5) * cell_m
-    return x, y
