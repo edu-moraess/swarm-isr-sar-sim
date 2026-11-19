@@ -69,7 +69,7 @@ class GossipNode:
             for (origin_id, seq), batch in self.store.items()
             if origin_id != peer_id and seq > peer_hwm.get(origin_id, 0)
         ]
-        pending.sort(key=lambda batch: (batch.drone_id, batch.seq))
+        pending.sort(key=lambda batch: (batch.seq, batch.drone_id))
         return pending[:max_batches]
 
 
