@@ -1,4 +1,4 @@
-"""Bayesian log-odds target belief grid with watermark dedup and vectorized updates."""
+"""Bayesian log-odds belief with per-drone watermark and batch updates."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from swarm_core.messages import Observation
+from swarm_core.messages import Observation, ObservationBatch
 
 
 def logit(p: float) -> float:
@@ -23,17 +23,22 @@ def sigmoid(log_odds: float) -> float:
 
 
 class BeliefGrid:
-    """Per-cell log-odds belief.
+    """Per-cell log-odds.
 
-    Deduplication uses a per-drone watermark: only observations with
-    sequence number strictly greater than the last accepted for that
-    drone are applied.
+    Watermark is per-drone batch sequence: a batch is applied only if
+    batch.seq > watermark[drone_id]. All cells in the batch are then
+    updated atomically. Gossip can retransmit batches with seq >
+    receiver.watermark[sender].
     """
 
     def __init__(self, n_cells: int, prior: float = 0.1) -> None:
         self.n_cells = n_cells
+        self.prior = prior
         self.log_odds = np.full(n_cells, logit(prior), dtype=np.float64)
-        self._watermark: dict[int, float] = {}
+        self._watermark: dict[int, int] = {}
+
+    def watermark(self, drone_id: int) -> int:
+        return self._watermark.get(drone_id, -1)
 
     def p(self, idx: int) -> float:
         return float(sigmoid(float(self.log_odds[idx])))
@@ -47,29 +52,41 @@ class BeliefGrid:
         out[~pos] = exp_lo / (1.0 + exp_lo)
         return out
 
-    def update(self, obs: Observation) -> None:
-        drone_id = obs.obs_id[0]
-        seq = obs.obs_id[1]
-        last = self._watermark.get(drone_id, -1.0)
-        if seq <= last:
-            return
-        self._watermark[drone_id] = seq
-
+    def _apply_obs(self, obs: Observation) -> None:
         s = obs.sensitivity
         f = obs.false_alarm
         if obs.detected:
-            if f <= 0:
-                delta = 10.0
-            else:
-                delta = math.log(max(s, 1e-9) / max(f, 1e-9))
+            delta = 10.0 if f <= 0 else math.log(max(s, 1e-9) / max(f, 1e-9))
         else:
             delta = math.log(max(1.0 - s, 1e-9) / max(1.0 - f, 1e-9))
-
         self.log_odds[obs.cell_idx] += delta
+
+    def update(self, obs: Observation) -> None:
+        last = self._watermark.get(obs.drone_id, -1)
+        if obs.seq <= last:
+            return
+        self._watermark[obs.drone_id] = obs.seq
+        self._apply_obs(obs)
+
+    def update_batch(self, batch: ObservationBatch) -> int:
+        """Apply entire batch if seq is newer. Returns number of cells updated."""
+        last = self._watermark.get(batch.drone_id, -1)
+        if batch.seq <= last:
+            return 0
+        self._watermark[batch.drone_id] = batch.seq
+        for obs in batch.observations:
+            self._apply_obs(obs)
+        return len(batch.observations)
 
     def fuse(self, observations: Iterable[Observation]) -> None:
         for o in observations:
             self.update(o)
+
+    def fuse_batches(self, batches: Iterable[ObservationBatch]) -> int:
+        n = 0
+        for b in batches:
+            n += self.update_batch(b)
+        return n
 
     def entropy(self, idx: int) -> float:
         p = self.p(idx)
@@ -84,7 +101,7 @@ class BeliefGrid:
         return float(np.mean([self.entropy(i) for i in idxs]))
 
     def copy(self) -> BeliefGrid:
-        b = BeliefGrid(self.n_cells)
+        b = BeliefGrid(self.n_cells, prior=self.prior)
         b.log_odds = self.log_odds.copy()
         b._watermark = dict(self._watermark)
         return b

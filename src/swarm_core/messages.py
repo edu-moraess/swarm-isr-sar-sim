@@ -100,7 +100,7 @@ class Alert:
 class LeaderElection:
     leader_id: int
     term: int
-    kind: int  # 0 HEARTBEAT 1 REQUEST_VOTE 2 VOTE 3 STEP_DOWN
+    kind: int
     sender_id: int
     timestamp: float = 0.0
 
@@ -116,9 +116,10 @@ class NetworkStatus:
 
 @dataclass
 class Observation:
-    """Internal observation used by belief fusion."""
+    """Single cell observation. seq is per-drone monotonic counter."""
 
-    obs_id: tuple[int, float, int]  # (drone_id, time, cell_idx)
+    drone_id: int
+    seq: int
     cell_idx: int
     detected: bool
     sensitivity: float
@@ -126,8 +127,21 @@ class Observation:
     timestamp: float = 0.0
 
 
+@dataclass
+class ObservationBatch:
+    """All observations from one drone at one sense step.
+
+    seq is a single integer per batch (monotonic per drone).
+    Gossip retransmits from the receiver's watermark for that drone.
+    """
+
+    drone_id: int
+    seq: int
+    timestamp: float
+    observations: list[Observation] = field(default_factory=list)
+
+
 def to_dict(obj: Any) -> Any:
-    """Simple recursive dataclass → dict for JSON logging."""
     if hasattr(obj, "__dataclass_fields__"):
         return {k: to_dict(getattr(obj, k)) for k in obj.__dataclass_fields__}
     if isinstance(obj, IntEnum):

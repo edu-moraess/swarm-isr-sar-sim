@@ -1,4 +1,4 @@
-"""FSM: legal transitions and illegal raise."""
+"""FSM: legal transitions including DEGRADED battery_low and gps_degraded."""
 
 import pytest
 
@@ -25,6 +25,21 @@ def test_illegal_raises() -> None:
     fsm = MissionFSM()
     with pytest.raises(ValueError, match="Illegal"):
         fsm.trigger("altitude_reached")
+
+
+def test_degraded_battery_low_to_rtl() -> None:
+    fsm = MissionFSM(MissionPhase.DEGRADED)
+    fsm.trigger("battery_low")
+    assert fsm.phase == MissionPhase.RTL
+
+
+def test_gps_degraded_to_degraded() -> None:
+    fsm = MissionFSM(MissionPhase.SEARCH)
+    fsm.trigger("gps_degraded")
+    assert fsm.phase == MissionPhase.DEGRADED
+    fsm2 = MissionFSM(MissionPhase.TAKEOFF)
+    fsm2.trigger("gps_degraded")
+    assert fsm2.phase == MissionPhase.DEGRADED
 
 
 def test_all_table_entries_reachable() -> None:

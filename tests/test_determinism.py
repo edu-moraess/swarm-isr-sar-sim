@@ -7,11 +7,12 @@ from swarm_core.config import MissionConfig, PerceptionConfig, SwarmConfig
 from swarm_core.drone import create_drones, step_drone
 from swarm_core.events import EventLog
 from swarm_core.rng import RNGManager
-from swarm_core.sensors import sense
+from swarm_core.sensors import reset_sense_seq, sense
 from swarm_core.world import build_world
 
 
 def _run_short(seed: int) -> str:
+    reset_sense_seq()
     rng_mgr = RNGManager(seed)
     world_rng = rng_mgr.spawn("world")[0]
     sensor_rng = rng_mgr.spawn("sensors")[0]
@@ -25,13 +26,14 @@ def _run_short(seed: int) -> str:
     clock = SimClock(dt=0.1)
     log = EventLog()
 
-    for _ in range(20):
+    for step in range(20):
         t = clock.tick()
         world.update_wind(clock.dt)
         for d in drones:
             step_drone(d, clock.dt, swarm, swarm.battery, world, perc.gps_sigma_m, drone_rng)
-            obs = sense(d, world, perc, t, sensor_rng)
-            log.emit(t, "sense", drone_id=d.id, n_obs=len(obs))
+            if step % 5 == 0:
+                batch = sense(d, world, perc, t, sensor_rng)
+                log.emit(t, "sense", drone_id=d.id, n_obs=len(batch.observations), seq=batch.seq)
         log.emit(t, "tick", step=clock.step)
 
     return log.sha256()

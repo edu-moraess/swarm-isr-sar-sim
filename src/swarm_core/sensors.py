@@ -1,24 +1,23 @@
-"""Footprint, line-of-sight (Bresenham) and detection model."""
+"""Footprint (rectangle-bounded), Bresenham LoS and detection model."""
 
 from __future__ import annotations
-
-from collections.abc import Iterable
 
 import numpy as np
 from numpy.random import Generator
 
 from swarm_core.config import PerceptionConfig
 from swarm_core.drone import Drone
-from swarm_core.messages import Observation
+from swarm_core.messages import Observation, ObservationBatch
 from swarm_core.world import CellState, World
 
 
 def footprint_radius(alt_m: float, cfg: PerceptionConfig) -> float:
-    """Lookup or interpolate footprint radius by altitude."""
     table = {float(k): v for k, v in cfg.footprint_radius_m.items()}
     if alt_m in table:
         return table[alt_m]
     keys = sorted(table.keys())
+    if not keys:
+        return 15.0
     if alt_m <= keys[0]:
         return table[keys[0]]
     if alt_m >= keys[-1]:
@@ -31,7 +30,6 @@ def footprint_radius(alt_m: float, cfg: PerceptionConfig) -> float:
 
 
 def bresenham_line(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
-    """Grid cells on the line from (x0,y0) to (x1,y1)."""
     cells: list[tuple[int, int]] = []
     dx = abs(x1 - x0)
     dy = -abs(y1 - y0)
@@ -54,7 +52,6 @@ def bresenham_line(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
 
 
 def line_of_sight(world: World, from_idx: int, to_idx: int) -> bool:
-    """True if no OCCUPIED cell blocks the Bresenham path (excluding endpoints)."""
     r0, c0 = divmod(from_idx, world.width)
     r1, c1 = divmod(to_idx, world.width)
     path = bresenham_line(c0, r0, c1, r1)
@@ -66,22 +63,33 @@ def line_of_sight(world: World, from_idx: int, to_idx: int) -> bool:
 
 
 def cells_in_footprint(world: World, drone: Drone, radius: float) -> list[int]:
-    """Return free cell indices inside circular footprint of the drone."""
-    cx, cy = drone.position[0], drone.position[1]
+    """Iterate only the bounding rectangle around the drone."""
+    cx, cy = float(drone.position[0]), float(drone.position[1])
+    cell = world.cell_m
+    r_cells = int(np.ceil(radius / cell)) + 1
+    col0 = max(0, int((cx - world.origin.x) / cell) - r_cells)
+    col1 = min(world.width - 1, int((cx - world.origin.x) / cell) + r_cells)
+    row0 = max(0, int((cy - world.origin.y) / cell) - r_cells)
+    row1 = min(world.height - 1, int((cy - world.origin.y) / cell) + r_cells)
+
+    d_idx = world.xy_to_idx(cx, cy)
     result: list[int] = []
-    for idx in range(world.n_cells):
-        if not world.is_free(idx):
-            continue
-        x, y = world.idx_to_xy(idx)
-        if (x - cx) ** 2 + (y - cy) ** 2 <= radius**2:
-            d_idx = world.xy_to_idx(cx, cy)
+    r2 = radius * radius
+    for row in range(row0, row1 + 1):
+        for col in range(col0, col1 + 1):
+            idx = row * world.width + col
+            if not world.is_free(idx):
+                continue
+            x = world.origin.x + (col + 0.5) * cell
+            y = world.origin.y + (row + 0.5) * cell
+            if (x - cx) ** 2 + (y - cy) ** 2 > r2:
+                continue
             if d_idx is None or line_of_sight(world, d_idx, idx):
                 result.append(idx)
     return result
 
 
 def sensitivity(dist: float, radius: float, s0: float = 0.92) -> float:
-    """s(d) = s0 for d <= 0.5r, linear decay to 0.60 at d = r."""
     if dist <= 0.5 * radius:
         return s0
     if dist >= radius:
@@ -90,24 +98,30 @@ def sensitivity(dist: float, radius: float, s0: float = 0.92) -> float:
     return s0 + t * (0.60 - s0)
 
 
+_sense_seq: dict[int, int] = {}
+
+
 def sense(
     drone: Drone,
     world: World,
     cfg: PerceptionConfig,
     t: float,
     rng: Generator,
-) -> list[Observation]:
-    """Produce observations for all cells in the current footprint."""
+) -> ObservationBatch:
+    """Produce an ObservationBatch for all cells in the current footprint."""
     alt = float(drone.position[2])
     radius = footprint_radius(alt, cfg)
     cells = cells_in_footprint(world, drone, radius)
     s0 = cfg.detector.sensitivity
     f = cfg.detector.false_alarm
-    obs: list[Observation] = []
+
+    seq = _sense_seq.get(drone.id, 0) + 1
+    _sense_seq[drone.id] = seq
 
     target_cells = {tg.cell_idx for tg in world.targets}
     clutter_cells = {c.cell_idx for c in world.clutter}
 
+    obs_list: list[Observation] = []
     for cell in cells:
         x, y = world.idx_to_xy(cell)
         dist = float(np.hypot(x - drone.position[0], y - drone.position[1]))
@@ -120,10 +134,10 @@ def sense(
         else:
             detected = False
 
-        obs_id = (drone.id, t, cell)
-        obs.append(
+        obs_list.append(
             Observation(
-                obs_id=obs_id,
+                drone_id=drone.id,
+                seq=seq,
                 cell_idx=cell,
                 detected=detected,
                 sensitivity=s,
@@ -131,4 +145,15 @@ def sense(
                 timestamp=t,
             )
         )
-    return obs
+
+    return ObservationBatch(
+        drone_id=drone.id,
+        seq=seq,
+        timestamp=t,
+        observations=obs_list,
+    )
+
+
+def reset_sense_seq() -> None:
+    """Clear sequence counters (call between independent runs)."""
+    _sense_seq.clear()
