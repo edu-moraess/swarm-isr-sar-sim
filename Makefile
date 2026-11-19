@@ -28,7 +28,7 @@ typecheck:
 	mypy src/swarm_core
 
 test:
-	pytest --cov=swarm_core --cov-report=term-missing --cov-fail-under=0
+	pytest --cov=swarm_core --cov-report=term-missing --cov-fail-under=80
 
 smoke:
 	@mkdir -p results/smoke
