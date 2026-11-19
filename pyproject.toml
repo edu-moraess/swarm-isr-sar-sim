@@ -55,8 +55,6 @@ experiments = [
     "seaborn>=0.13",
 ]
 
-[project.scripts]
-swarm-sim = "swarm_core.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
