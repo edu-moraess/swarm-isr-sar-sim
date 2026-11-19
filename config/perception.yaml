@@ -1,0 +1,8 @@
+detector:
+  kind: aruco
+  sensitivity: 0.92
+  false_alarm: 0.02
+gps_sigma_m: 1.5
+footprint_radius_m:
+  "30": 15.0
+  "15": 7.5

@@ -1,0 +1,32 @@
+profiles:
+  clean:
+    latency_ms: 0
+    jitter_ms: 0
+    loss_pct: 0
+  mild:
+    latency_ms: 50
+    jitter_ms: 20
+    loss_pct: 5
+  harsh:
+    latency_ms: 200
+    jitter_ms: 80
+    loss_pct: 20
+    burst: true
+  partition:
+    latency_ms: 50
+    jitter_ms: 20
+    loss_pct: 5
+    partition:
+      start_s: 300
+      duration_s: 60
+      groups: [[1,2,3,4,5],[6,7,8,9,10]]
+jamming:
+  region:
+    center: [100, 100]
+    radius_m: 40
+  start_s: 120
+  duration_s: 60
+  loss_pct: 60
+qos:
+  reliable_retries: 3
+  ack_timeout_ms: 200

@@ -1,0 +1,14 @@
+n_drones: 10
+formation:
+  type: line
+  spacing_m: 15
+allocation: cbba
+consensus: raft_like
+cruise_mps: 5.0
+search_alt_m: 30
+verify_alt_m: 15
+battery:
+  drain_hover_pct_s: 0.040
+  drain_per_mps_pct_s: 0.004
+  rtl_reserve_pct: 15
+comm_range_m: 150

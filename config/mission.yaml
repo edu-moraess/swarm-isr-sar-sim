@@ -1,0 +1,23 @@
+mission_id: sar_open_field_001
+seed: 0
+area:
+  type: rect
+  size_m: [200, 200]
+  cell_m: 5
+  origin: [0, 0]
+base: [0, 0]
+time_limit_s: 900
+stop:
+  coverage_pct: 95
+  all_targets_confirmed: true
+targets:
+  count: 8
+  clutter: 12
+prior:
+  type: uniform
+sectors:
+  size_m: 20
+  priorities: {}
+operator:
+  mode: active
+  script: config/operator_script.yaml
