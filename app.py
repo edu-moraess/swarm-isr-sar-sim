@@ -159,7 +159,9 @@ with st.sidebar:
     root = Path(root_text).expanduser()
     run_name = st.selectbox("Dataset", ["inference_01"], index=0)
     run_dir = root / run_name
-    video_path = run_dir / "swarm_visdrone_bytetrack.mp4"
+    video_h264_path = run_dir / "swarm_visdrone_bytetrack_h264.mp4"
+    video_original_path = run_dir / "swarm_visdrone_bytetrack.mp4"
+    video_path = video_h264_path if video_h264_path.is_file() else video_original_path
     csv_path = run_dir / "detections.csv"
     report_path = run_dir / "inference_report.json"
     st.divider()
@@ -202,7 +204,7 @@ if not data.empty:
     col1.metric("DETECTIONS", f"{total_detections:,}")
     col2.metric("TRACK IDs", f"{total_tracks:,}")
     col3.metric("FRAMES", f"{data['frame'].nunique():,}")
-    col4.metric("CURRENT FRAME", f"{len(current):,}")
+    col4.metric("DETECTIONS IN FRAME", f"{len(current):,}")
 
     left, right = st.columns([2.25, 1], gap="medium")
     with left:
@@ -214,7 +216,8 @@ if not data.empty:
         st.plotly_chart(
             make_track_figure(plot_data, selected_frame),
             use_container_width=True,
-            config={"displaylogo": False, "scrollZoom": True},
+            key="spatial_track_view",
+            config={"displaylogo": False, "scrollZoom": True, "responsive": True},
         )
     with right:
         st.markdown('<div class="eyebrow">02 / VIDEO INTELLIGENCE FEED</div>', unsafe_allow_html=True)
