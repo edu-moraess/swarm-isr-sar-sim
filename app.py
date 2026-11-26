@@ -8,77 +8,122 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-DEFAULT_ROOT = Path(
-    os.getenv(
-        "SWARM_DEMO_ROOT",
-        "/content/drive/MyDrive/SWARM_ISR_SAR_BACKUPS/"
-        "DOMAIN_COMPARISON_01/demo_run_01",
-    )
-)
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+DEFAULT_ROOT = Path(os.getenv(
+    "SWARM_DEMO_ROOT",
+    "/content/drive/MyDrive/SWARM_ISR_SAR_BACKUPS/DOMAIN_COMPARISON_01/demo_run_01",
+))
+COLORS = ["#4cc9f0", "#a3e635", "#fbbf24", "#f472b6", "#a78bfa", "#fb7185", "#2dd4bf"]
 
 st.set_page_config(
-    page_title="SWARM | Tactical Geospatial Command",
+    page_title="SWARM ISR/SAR | Operational Workspace",
     page_icon="◈",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-st.markdown(
-    """
-    <style>
-    :root { --bg:#07111b; --panel:#0d1b29; --line:#1c3447;
-            --cyan:#31c5e8; --muted:#7893a8; --green:#a8d84b; }
-    .stApp { background:var(--bg); color:#dce8f1; }
-    [data-testid="stHeader"] { background:rgba(7,17,27,.92); }
-    [data-testid="stSidebar"] { background:#091521; border-right:1px solid var(--line); }
-    .block-container { padding-top:1.1rem; max-width:100%; }
-    .swarm-top { display:flex; justify-content:space-between; align-items:center;
-      border-bottom:1px solid var(--line); padding:0 0 14px 0; margin-bottom:18px; }
-    .swarm-brand { font-size:1.15rem; font-weight:800; letter-spacing:.18em; color:#eef7ff; }
-    .swarm-sub { color:var(--muted); font-size:.67rem; letter-spacing:.16em; }
-    .swarm-status { color:var(--green); border:1px solid #48652b; padding:5px 10px;
-      font-size:.68rem; letter-spacing:.12em; border-radius:3px; }
-    .panel { background:var(--panel); border:1px solid var(--line); border-radius:5px;
-      padding:12px 14px; }
-    .eyebrow { color:var(--cyan); font-size:.68rem; letter-spacing:.16em; font-weight:700; }
-    .small-muted { color:var(--muted); font-size:.76rem; }
-    div[data-testid="stMetric"] { background:var(--panel); border:1px solid var(--line);
-      padding:10px 12px; border-radius:4px; }
-    div[data-testid="stMetricLabel"] { color:var(--muted); }
-    div[data-testid="stMetricValue"] { color:#edf7ff; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+:root {
+  --bg:#080d13; --surface:#0d151e; --surface2:#111d28; --line:#233342;
+  --text:#e5edf4; --muted:#8293a3; --cyan:#56c8e8; --green:#9bcf62;
+  --amber:#e6b45c; --red:#e47777;
+}
+html, body, [class*="css"] { font-family:Inter, sans-serif; }
+.stApp { background:var(--bg); color:var(--text); }
+[data-testid="stHeader"] { background:rgba(8,13,19,.94); }
+[data-testid="stSidebar"] { background:#0b131c; border-right:1px solid var(--line); }
+.block-container { max-width:1600px; padding:1.05rem 1.35rem 2rem; }
+#MainMenu, footer { visibility:hidden; }
+div[data-testid="stMetric"] { background:var(--surface); border:1px solid var(--line);
+  padding:10px 13px; border-radius:3px; }
+div[data-testid="stMetricLabel"] { color:var(--muted); font-size:.68rem; letter-spacing:.11em; }
+div[data-testid="stMetricValue"] { color:var(--text); font-family:'IBM Plex Mono',monospace; }
+.stButton button, .stDownloadButton button { border-radius:3px; border:1px solid var(--line);
+  background:#142331; color:var(--text); }
+.stSelectbox label, .stSlider label { color:var(--muted); font-size:.72rem; letter-spacing:.08em; }
+[data-testid="stDataFrame"] { border:1px solid var(--line); }
+hr { border-color:var(--line); }
+.swarm-head { display:flex; justify-content:space-between; align-items:center;
+  gap:16px; padding:4px 0 15px; border-bottom:1px solid var(--line); margin-bottom:14px; }
+.brand { font-size:1.12rem; font-weight:800; letter-spacing:.19em; color:#f2f7fb; }
+.brand span { color:var(--cyan); }
+.subbrand { color:var(--muted); font:500 .62rem 'IBM Plex Mono',monospace;
+  letter-spacing:.13em; margin-top:4px; }
+.status { border:1px solid #536d3b; color:var(--green); padding:6px 9px;
+  border-radius:2px; font:600 .62rem 'IBM Plex Mono',monospace; letter-spacing:.08em; white-space:nowrap; }
+.section-label { color:var(--cyan); font:600 .66rem 'IBM Plex Mono',monospace;
+  letter-spacing:.14em; text-transform:uppercase; margin:2px 0 9px; }
+.panel { background:var(--surface); border:1px solid var(--line); padding:12px; border-radius:3px; }
+.panel-title { color:#dbe7ef; font-size:.78rem; font-weight:700; letter-spacing:.08em; }
+.panel-meta { color:var(--muted); font: .62rem 'IBM Plex Mono',monospace; }
+.kv { display:flex; justify-content:space-between; gap:10px; padding:7px 0;
+  border-bottom:1px solid #1b2a37; font-size:.72rem; }
+.kv:last-child { border-bottom:0; }
+.kv .k { color:var(--muted); }
+.kv .v { color:var(--text); font-family:'IBM Plex Mono',monospace; text-align:right; }
+.track-chip { display:inline-block; color:var(--cyan); border:1px solid #31556a;
+  padding:3px 7px; font:600 .65rem 'IBM Plex Mono',monospace; border-radius:2px; }
+.note { color:var(--muted); font-size:.68rem; line-height:1.5; }
+@media (max-width: 700px) {
+  .block-container { padding:.65rem .65rem 1.5rem; }
+  .brand { font-size:.98rem; }
+  .subbrand { font-size:.54rem; }
+  .status { font-size:.55rem; padding:5px 6px; }
+}
+</style>
+""", unsafe_allow_html=True)
+
 
 def find_column(df: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
     lookup = {str(c).strip().lower(): c for c in df.columns}
-    for name in candidates:
-        if name in lookup:
-            return lookup[name]
-    return None
+    return next((lookup[name] for name in candidates if name in lookup), None)
 
-def load_json(path: Path) -> dict:
+
+@st.cache_data(show_spinner=False)
+def load_csv(path_text: str, modified: float) -> pd.DataFrame:
+    del modified
+    path = Path(path_text)
+    return pd.read_csv(path) if path.is_file() else pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
+def load_report(path_text: str, modified: float) -> dict:
+    del modified
+    path = Path(path_text)
     if not path.is_file():
         return {}
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {}
+        result = json.loads(path.read_text(encoding="utf-8"))
+        return result if isinstance(result, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
 
-def load_detections(path: Path) -> pd.DataFrame:
-    if not path.is_file():
-        return pd.DataFrame()
-    try:
-        return pd.read_csv(path)
-    except Exception as exc:
-        st.error(f"Não foi possível ler o CSV: {exc}")
-        return pd.DataFrame()
 
-def normalise_detections(raw: pd.DataFrame) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def read_video_frame(path_text: str, frame_number: int, modified: float):
+    del modified
+    if cv2 is None:
+        return None
+    capture = cv2.VideoCapture(path_text)
+    if not capture.isOpened():
+        return None
+    capture.set(cv2.CAP_PROP_POS_FRAMES, max(0, frame_number - 1))
+    ok, frame = capture.read()
+    capture.release()
+    if not ok:
+        return None
+    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+
+def normalise(raw: pd.DataFrame) -> pd.DataFrame:
     if raw.empty:
-        return raw
+        return pd.DataFrame()
     aliases = {
         "frame": ("frame", "frame_id", "frame_idx", "frame_number"),
         "track_id": ("track_id", "track", "id", "tracker_id"),
@@ -102,170 +147,169 @@ def normalise_detections(raw: pd.DataFrame) -> pd.DataFrame:
             out[col] = pd.to_numeric(out[col], errors="coerce")
     if "class_name" not in out:
         out["class_name"] = "unknown"
-    out = out.dropna(subset=["frame", "track_id", "x1", "y1", "x2", "y2"])
+    out = out.dropna(subset=["frame", "track_id", "x1", "y1", "x2", "y2"]).copy()
     out["frame"] = out["frame"].astype(int)
     out["track_id"] = out["track_id"].astype(int)
     out["cx"] = (out["x1"] + out["x2"]) / 2
     out["cy"] = (out["y1"] + out["y2"]) / 2
     return out
 
-def make_track_figure(data: pd.DataFrame, selected_frame: int) -> go.Figure:
+
+def track_figure(data: pd.DataFrame, selected_id: int | None, current_frame: int) -> go.Figure:
     fig = go.Figure()
     if data.empty:
-        fig.add_annotation(
-            text="TRACK DATA UNAVAILABLE",
-            x=0.5, y=0.5, xref="paper", yref="paper",
-            showarrow=False, font=dict(color="#7893a8", size=15),
-        )
+        fig.add_annotation(text="NO TRACK OBSERVATIONS", x=.5, y=.5, xref="paper",
+                           yref="paper", showarrow=False, font=dict(color="#8293a3"))
     else:
-        for track_id, group in data.sort_values("frame").groupby("track_id"):
+        ids = sorted(data["track_id"].unique())
+        for index, track_id in enumerate(ids):
+            part = data[data["track_id"] == track_id].sort_values("frame")
+            active = selected_id == int(track_id)
             fig.add_trace(go.Scatter(
-                x=group["cx"], y=group["cy"], mode="lines+markers",
-                name=f"TRK-{track_id:03d}",
-                line=dict(width=1.5), marker=dict(size=4),
-                opacity=0.72,
-                hovertemplate=(
-                    f"TRACK {track_id}<br>Frame %{{customdata}}"
-                    "<br>X %{x:.0f} px<br>Y %{y:.0f} px<extra></extra>"
-                ),
-                customdata=group["frame"],
+                x=part["cx"], y=part["cy"], mode="lines+markers",
+                name=f"TRK-{int(track_id):03d}",
+                line=dict(width=2.4 if active else 1, color=COLORS[index % len(COLORS)]),
+                marker=dict(size=5 if active else 3),
+                opacity=1 if active else .28,
+                hovertemplate=f"TRACK {int(track_id)}<br>FRAME %{{customdata}}<br>X %{{x:.0f}} px<br>Y %{{y:.0f}} px<extra></extra>",
+                customdata=part["frame"],
+                showlegend=active or selected_id is None,
             ))
-        current = data[data["frame"] == selected_frame]
-        if not current.empty:
+        at_frame = data[data["frame"] == current_frame]
+        if not at_frame.empty:
             fig.add_trace(go.Scatter(
-                x=current["cx"], y=current["cy"], mode="markers",
-                name="CURRENT FRAME",
-                marker=dict(size=12, color="#f3b84b", symbol="circle-open",
-                            line=dict(width=2)),
-                text=current["track_id"].map(lambda x: f"TRK-{x:03d}"),
+                x=at_frame["cx"], y=at_frame["cy"], mode="markers",
+                name="FRAME CONTACTS",
+                marker=dict(size=10, color="#f5c46a", symbol="circle-open", line=dict(width=2)),
+                text=at_frame["track_id"].map(lambda value: f"TRK-{int(value):03d}"),
                 hovertemplate="%{text}<extra></extra>",
             ))
     fig.update_layout(
-        paper_bgcolor="#0d1b29", plot_bgcolor="#091521",
-        font=dict(color="#c8d8e5", size=10),
-        margin=dict(l=8, r=8, t=8, b=8), height=490,
-        legend=dict(orientation="h", y=-0.18, bgcolor="rgba(0,0,0,0)"),
-        xaxis=dict(title="IMAGE X (PIXELS)", gridcolor="#1c3447", zeroline=False),
-        yaxis=dict(title="IMAGE Y (PIXELS)", gridcolor="#1c3447",
-                   zeroline=False, autorange="reversed", scaleanchor="x",
-                   scaleratio=1),
+        height=300, margin=dict(l=8, r=8, t=8, b=8),
+        paper_bgcolor="#0d151e", plot_bgcolor="#0a121a",
+        font=dict(color="#b9c8d4", size=9),
+        legend=dict(orientation="h", y=-.23, bgcolor="rgba(0,0,0,0)"),
+        xaxis=dict(title="IMAGE X / PX", gridcolor="#1d2d3b", zeroline=False),
+        yaxis=dict(title="IMAGE Y / PX", gridcolor="#1d2d3b", zeroline=False,
+                   autorange="reversed", scaleanchor="x", scaleratio=1),
     )
     return fig
 
+
+root_text = str(DEFAULT_ROOT)
 with st.sidebar:
-    st.markdown("### ◈ SWARM CONTROL")
-    st.caption("DATA SOURCE / LOCAL ARTIFACTS")
-    root_text = st.text_input("Experiment directory", str(DEFAULT_ROOT))
-    root = Path(root_text).expanduser()
-    run_name = st.selectbox("Dataset", ["inference_01"], index=0)
-    run_dir = root / run_name
-    video_h264_path = run_dir / "swarm_visdrone_bytetrack_h264.mp4"
-    video_original_path = run_dir / "swarm_visdrone_bytetrack.mp4"
-    video_path = video_h264_path if video_h264_path.is_file() else video_original_path
-    csv_path = run_dir / "detections.csv"
-    report_path = run_dir / "inference_report.json"
-    st.divider()
-    st.caption("DISPLAY")
-    show_tracks = st.checkbox("Show track trajectories", value=True)
-    st.caption("This view is a recorded experiment, not a live sensor feed.")
+    st.markdown("### SWARM / DATA SOURCE")
+    root_text = st.text_input("Experiment directory", root_text)
+    st.caption("Recorded experiment artifacts only.")
+root = Path(root_text).expanduser()
+run_dir = root / "inference_01"
+h264 = run_dir / "swarm_visdrone_bytetrack_h264.mp4"
+original = run_dir / "swarm_visdrone_bytetrack.mp4"
+video = h264 if h264.is_file() else original
+csv_path = run_dir / "detections.csv"
+report_path = run_dir / "inference_report.json"
 
-st.markdown(
-    """
-    <div class="swarm-top">
-      <div><div class="swarm-brand">SWARM <span style="color:#31c5e8">/</span> ISR·SAR</div>
-      <div class="swarm-sub">TACTICAL GEOSPATIAL COMMAND · PERCEPTION & TRACKING</div></div>
-      <div class="swarm-status">● RECORDED DATA / REPLAY</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<div class="swarm-head">
+  <div><div class="brand">SWARM <span>/</span> ISR·SAR</div>
+  <div class="subbrand">PERCEPTION SYSTEMS &nbsp; / &nbsp; RECORDED EXPERIMENT WORKSPACE</div></div>
+  <div class="status">● REPLAY MODE &nbsp; / &nbsp; OFFLINE DATA</div>
+</div>
+""", unsafe_allow_html=True)
 
-raw = load_detections(csv_path)
-data = normalise_detections(raw)
-report = load_json(report_path)
+raw = load_csv(str(csv_path), csv_path.stat().st_mtime if csv_path.exists() else 0)
+data = normalise(raw)
+report = load_report(str(report_path), report_path.stat().st_mtime if report_path.exists() else 0)
 
-if raw.empty:
-    st.warning("DETECTION CSV NÃO ENCONTRADO. Confira o diretório do experimento na barra lateral.")
-elif data.empty:
-    st.error(
-        "O CSV foi localizado, mas seu esquema não contém os campos necessários "
-        "(frame, track_id e coordenadas x1/y1/x2/y2). Nenhum dado foi inventado."
-    )
+if data.empty:
+    st.error("Detection data unavailable or incompatible. Verify the experiment directory and CSV schema.")
+    st.stop()
 
-if not data.empty:
-    max_frame = int(data["frame"].max())
-    min_frame = int(data["frame"].min())
-    selected_frame = st.slider("FRAME INSPECTION", min_frame, max_frame, min_frame)
-    current = data[data["frame"] == selected_frame]
-    total_detections = len(data)
-    total_tracks = int(data["track_id"].nunique())
-    fps = report.get("model_call_fps", report.get("fps", None))
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("DETECTIONS", f"{total_detections:,}")
-    col2.metric("TRACK IDs", f"{total_tracks:,}")
-    col3.metric("FRAMES", f"{data['frame'].nunique():,}")
-    col4.metric("DETECTIONS IN FRAME", f"{len(current):,}")
+min_frame, max_frame = int(data.frame.min()), int(data.frame.max())
+all_ids = sorted(int(value) for value in data.track_id.unique())
+if "swarm_selected_track" not in st.session_state or st.session_state.swarm_selected_track not in all_ids:
+    st.session_state.swarm_selected_track = all_ids[0]
 
-    left, right = st.columns([2.25, 1], gap="medium")
-    with left:
-        st.markdown('<div class="eyebrow">01 / SPATIAL TRACK VIEW</div>', unsafe_allow_html=True)
-        st.caption(
-            "Image-plane coordinates (pixels). Georeferencing is not present in this dataset."
-        )
-        plot_data = data if show_tracks else current
-        st.plotly_chart(
-            make_track_figure(plot_data, selected_frame),
-            use_container_width=True,
-            key="spatial_track_view",
-            config={"displaylogo": False, "scrollZoom": True, "responsive": True},
-        )
-    with right:
-        st.markdown('<div class="eyebrow">02 / VIDEO INTELLIGENCE FEED</div>', unsafe_allow_html=True)
-        if video_path.is_file():
-            st.video(str(video_path))
+toolbar_a, toolbar_b, toolbar_c = st.columns([1.25, 1.25, 2.5])
+with toolbar_a:
+    selected_id = st.selectbox("SELECTED CONTACT", all_ids,
+        index=all_ids.index(st.session_state.swarm_selected_track),
+        format_func=lambda value: f"TRK-{value:03d}", key="swarm_selected_track")
+with toolbar_b:
+    selected_frame = st.select_slider("FRAME", options=list(range(min_frame, max_frame + 1)),
+                                      value=min_frame, key="swarm_frame")
+with toolbar_c:
+    st.caption("EXPERIMENT / VISDRONE-VID · IMAGE-PLANE COORDINATES · NOT GEOREFERENCED")
+
+current = data[data.frame == selected_frame]
+selected_track = data[data.track_id == selected_id].sort_values("frame")
+selected_now = current[current.track_id == selected_id]
+track_first = int(selected_track.frame.min())
+track_last = int(selected_track.frame.max())
+track_observations = len(selected_track)
+span = max(1, track_last - track_first + 1)
+continuity = track_observations / span
+
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("DETECTIONS", f"{len(data):,}")
+m2.metric("TRACKED CONTACTS", f"{len(all_ids):02d}")
+m3.metric("VIDEO FRAMES", f"{data.frame.nunique():02d}")
+m4.metric("FRAME CONTACTS", f"{len(current):02d}")
+
+left, right = st.columns([2.15, 1], gap="medium")
+with left:
+    st.markdown('<div class="section-label">01 / Primary observation feed</div>', unsafe_allow_html=True)
+    if video.is_file():
+        st.video(str(video))
+        if cv2 is not None:
+            frame = read_video_frame(str(video), int(selected_frame), video.stat().st_mtime)
+            if frame is not None:
+                st.markdown(f'<div class="panel-meta">FRAME INSPECTION / {selected_frame:03d} OF {max_frame:03d}</div>', unsafe_allow_html=True)
+                st.image(frame, use_container_width=True)
+            else:
+                st.caption("Frame preview unavailable; recorded video remains available above.")
         else:
-            st.warning(f"Vídeo não encontrado: {video_path}")
-        st.markdown('<div class="eyebrow">03 / CONTACT REGISTER</div>', unsafe_allow_html=True)
-        if not current.empty:
-            cols = [c for c in ["track_id", "class_name", "confidence", "cx", "cy"] if c in current]
-            view = current[cols].copy()
-            view = view.rename(columns={
-                "track_id": "TRACK", "class_name": "CLASS",
-                "confidence": "CONF", "cx": "X(px)", "cy": "Y(px)"
-            })
-            st.dataframe(view, use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhum contato registrado neste frame.")
+            st.caption("Install opencv-python-headless to enable frame-by-frame inspection.")
+    else:
+        st.warning("Recorded video file not found.")
+with right:
+    st.markdown('<div class="section-label">02 / Contact intelligence</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="panel"><div class="track-chip">TRK-{selected_id:03d}</div><div style="height:9px"></div><div class="panel-title">{str(selected_track.class_name.iloc[-1]).upper()}</div><div class="panel-meta">TRACK HISTORY / RECORDED OBSERVATIONS</div><div style="height:8px"></div><div class="kv"><span class="k">First observation</span><span class="v">F{track_first:03d}</span></div><div class="kv"><span class="k">Last observation</span><span class="v">F{track_last:03d}</span></div><div class="kv"><span class="k">Observations</span><span class="v">{track_observations}</span></div><div class="kv"><span class="k">Temporal coverage*</span><span class="v">{continuity:.1%}</span></div></div>', unsafe_allow_html=True)
+    st.caption("*Observations divided by frame span; descriptive, not a tracking-quality probability.")
+    if not selected_now.empty:
+        row = selected_now.iloc[0]
+        conf = f"{float(row.confidence):.3f}" if "confidence" in row and pd.notna(row.confidence) else "N/A"
+        st.markdown('<div class="section-label">Current frame observation</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="panel"><div class="kv"><span class="k">Detection confidence</span><span class="v">{conf}</span></div><div class="kv"><span class="k">Centroid X</span><span class="v">{row.cx:.1f} px</span></div><div class="kv"><span class="k">Centroid Y</span><span class="v">{row.cy:.1f} px</span></div></div>', unsafe_allow_html=True)
+    else:
+        st.info("Selected contact has no observation in this frame.")
 
-    st.markdown('<div class="eyebrow">04 / TRACK HISTORY</div>', unsafe_allow_html=True)
-    summary = data.groupby("track_id").agg(
-        first_frame=("frame", "min"),
-        last_frame=("frame", "max"),
-        observations=("frame", "count"),
-        class_name=("class_name", "last"),
-    ).reset_index()
-    summary["span_frames"] = summary["last_frame"] - summary["first_frame"] + 1
-    summary["continuity"] = (
-        summary["observations"] / summary["span_frames"].clip(lower=1)
-    ).round(3)
-    st.dataframe(summary.rename(columns={
-        "track_id": "TRACK ID", "first_frame": "FIRST",
-        "last_frame": "LAST", "observations": "OBSERVATIONS",
-        "class_name": "CLASS", "span_frames": "SPAN",
-        "continuity": "CONTINUITY",
-    }), use_container_width=True, hide_index=True)
+st.markdown('<div class="section-label">03 / Track geometry & temporal history</div>', unsafe_allow_html=True)
+geometry_col, ledger_col = st.columns([1.55, 1], gap="medium")
+with geometry_col:
+    st.plotly_chart(track_figure(data, selected_id, int(selected_frame)),
+                    use_container_width=True, config={"displaylogo": False, "responsive": True},
+                    key="swarm_track_geometry_v2")
+    st.caption("Centroid trajectories in image pixels. Highlighted line = selected contact.")
+with ledger_col:
+    st.markdown('<div class="panel-title">CONTACT REGISTER / CURRENT FRAME</div>', unsafe_allow_html=True)
+    if not current.empty:
+        view = current[["track_id", "class_name", "confidence", "cx", "cy"]].copy()
+        view.columns = ["TRACK", "CLASS", "CONF", "X / PX", "Y / PX"]
+        st.dataframe(view, use_container_width=True, hide_index=True, height=245)
+    else:
+        st.info("No detections in selected frame.")
 
-    st.download_button(
-        "EXPORT CURRENT TRACK REGISTER",
-        data=summary.to_csv(index=False).encode("utf-8"),
-        file_name="swarm_track_register.csv",
-        mime="text/csv",
-    )
-else:
-    st.info("Aguardando artefatos válidos do experimento para preencher a estação.")
+st.markdown('<div class="section-label">04 / Track ledger</div>', unsafe_allow_html=True)
+ledger = data.groupby("track_id").agg(
+    first_frame=("frame", "min"), last_frame=("frame", "max"),
+    observations=("frame", "count"), class_name=("class_name", "last"),
+).reset_index()
+ledger["coverage"] = (ledger.observations / (ledger.last_frame - ledger.first_frame + 1).clip(lower=1)).round(3)
+ledger.columns = ["TRACK ID", "FIRST FRAME", "LAST FRAME", "OBSERVATIONS", "CLASS", "FRAME COVERAGE"]
+st.dataframe(ledger, use_container_width=True, hide_index=True)
+st.download_button("EXPORT TRACK LEDGER", ledger.to_csv(index=False).encode("utf-8"),
+                   "swarm_track_ledger.csv", "text/csv")
 
 st.markdown("---")
-st.caption(
-    "SWARM ISR/SAR · Experimental visualization layer · "
-    "Recorded observations only · No operational targeting or engagement functions"
-)
+st.markdown('<div class="note">SWARM ISR/SAR / EXPERIMENTAL WORKSPACE &nbsp; · &nbsp; RECORDED DATA ONLY &nbsp; · &nbsp; NO LIVE SENSOR LINK &nbsp; · &nbsp; NO GEOGRAPHIC COORDINATES IN THIS DATASET</div>', unsafe_allow_html=True)
