@@ -72,9 +72,14 @@ hr { border-color:var(--line); }
 .note { color:var(--muted); font-size:.68rem; line-height:1.5; }
 @media (max-width: 700px) {
   .block-container { padding:.65rem .65rem 1.5rem; }
+  .swarm-head { flex-wrap:wrap; align-items:flex-start; gap:9px; }
   .brand { font-size:.98rem; }
-  .subbrand { font-size:.54rem; }
-  .status { font-size:.55rem; padding:5px 6px; }
+  .subbrand { font-size:.54rem; line-height:1.5; }
+  .status { font-size:.55rem; padding:5px 6px; white-space:normal; }
+  [data-testid="stHorizontalBlock"] { flex-wrap:wrap; gap:.65rem; }
+  [data-testid="column"] { flex:1 1 100% !important; min-width:0 !important; }
+  [data-testid="stDataFrame"] { overflow-x:auto; }
+  .section-label { line-height:1.5; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -247,6 +252,16 @@ selected_now = current[current.track_id == selected_id]
 track_first = int(selected_track.frame.min())
 track_last = int(selected_track.frame.max())
 track_observations = len(selected_track)
+class_counts = selected_track["class_name"].fillna("unknown").astype(str).str.lower().value_counts()
+dominant_class = str(class_counts.index[0]).upper() if not class_counts.empty else "UNKNOWN"
+class_variants = class_counts[class_counts.index != class_counts.index[0]] if len(class_counts) > 1 else pd.Series(dtype=int)
+class_distribution = " / ".join(
+    f"{str(name).upper()} {int(count)}" for name, count in class_counts.items()
+)
+current_class = (
+    str(selected_now.iloc[0]["class_name"]).upper()
+    if not selected_now.empty else "NOT OBSERVED"
+)
 span = max(1, track_last - track_first + 1)
 continuity = track_observations / span
 
@@ -261,20 +276,22 @@ with left:
     st.markdown('<div class="section-label">01 / Primary observation feed</div>', unsafe_allow_html=True)
     if video.is_file():
         st.video(str(video))
-        if cv2 is not None:
-            frame = read_video_frame(str(video), int(selected_frame), video.stat().st_mtime)
-            if frame is not None:
-                st.markdown(f'<div class="panel-meta">FRAME INSPECTION / {selected_frame:03d} OF {max_frame:03d}</div>', unsafe_allow_html=True)
-                st.image(frame, use_container_width=True)
+        st.caption("RECORDED VIDEO PLAYBACK · use FRAME inspection below for deterministic frame selection.")
+        with st.expander(f"INSPECT SELECTED FRAME · {selected_frame:03d} / {max_frame:03d}", expanded=False):
+            if cv2 is not None:
+                frame = read_video_frame(str(video), int(selected_frame), video.stat().st_mtime)
+                if frame is not None:
+                    st.image(frame, use_container_width=True)
+                    st.caption("Still frame decoded independently from the recorded video; it does not control the video player's playback position.")
+                else:
+                    st.warning("Selected frame could not be decoded.")
             else:
-                st.caption("Frame preview unavailable; recorded video remains available above.")
-        else:
-            st.caption("Install opencv-python-headless to enable frame-by-frame inspection.")
+                st.caption("Install opencv-python-headless to enable frame-by-frame inspection.")
     else:
         st.warning("Recorded video file not found.")
 with right:
     st.markdown('<div class="section-label">02 / Contact intelligence</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="panel"><div class="track-chip">TRK-{selected_id:03d}</div><div style="height:9px"></div><div class="panel-title">{str(selected_track.class_name.iloc[-1]).upper()}</div><div class="panel-meta">TRACK HISTORY / RECORDED OBSERVATIONS</div><div style="height:8px"></div><div class="kv"><span class="k">First observation</span><span class="v">F{track_first:03d}</span></div><div class="kv"><span class="k">Last observation</span><span class="v">F{track_last:03d}</span></div><div class="kv"><span class="k">Observations</span><span class="v">{track_observations}</span></div><div class="kv"><span class="k">Temporal coverage*</span><span class="v">{continuity:.1%}</span></div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="panel"><div class="track-chip">TRK-{selected_id:03d}</div><div style="height:9px"></div><div class="panel-title">DOMINANT CLASS · {dominant_class}</div><div class="panel-meta">TRACK HISTORY / RECORDED OBSERVATIONS</div><div style="height:8px"></div><div class="kv"><span class="k">Class distribution</span><span class="v">{class_distribution}</span></div><div class="kv"><span class="k">Current frame class</span><span class="v">{current_class}</span></div><div class="kv"><span class="k">First observation</span><span class="v">F{track_first:03d}</span></div><div class="kv"><span class="k">Last observation</span><span class="v">F{track_last:03d}</span></div><div class="kv"><span class="k">Observations</span><span class="v">{track_observations}</span></div><div class="kv"><span class="k">Temporal coverage*</span><span class="v">{continuity:.1%}</span></div></div>', unsafe_allow_html=True)
     st.caption("*Observations divided by frame span; descriptive, not a tracking-quality probability.")
     if not selected_now.empty:
         row = selected_now.iloc[0]
@@ -295,7 +312,7 @@ with ledger_col:
     st.markdown('<div class="panel-title">CONTACT REGISTER / CURRENT FRAME</div>', unsafe_allow_html=True)
     if not current.empty:
         view = current[["track_id", "class_name", "confidence", "cx", "cy"]].copy()
-        view.columns = ["TRACK", "CLASS", "CONF", "X / PX", "Y / PX"]
+        view.columns = ["TRACK", "FRAME CLASS", "CONF", "X / PX", "Y / PX"]
         st.dataframe(view, use_container_width=True, hide_index=True, height=245)
     else:
         st.info("No detections in selected frame.")
@@ -303,10 +320,27 @@ with ledger_col:
 st.markdown('<div class="section-label">04 / Track ledger</div>', unsafe_allow_html=True)
 ledger = data.groupby("track_id").agg(
     first_frame=("frame", "min"), last_frame=("frame", "max"),
-    observations=("frame", "count"), class_name=("class_name", "last"),
+    observations=("frame", "count"),
 ).reset_index()
+dominant = (
+    data.assign(class_name=data["class_name"].fillna("unknown").astype(str).str.lower())
+        .groupby(["track_id", "class_name"]).size()
+        .rename("count").reset_index()
+        .sort_values(["track_id", "count", "class_name"], ascending=[True, False, True])
+        .drop_duplicates("track_id")
+        .set_index("track_id")["class_name"]
+)
+ledger["dominant_class"] = ledger["track_id"].map(dominant).str.upper()
+ledger["class_variants"] = ledger["track_id"].map(
+    data.assign(class_name=data["class_name"].fillna("unknown").astype(str).str.lower())
+        .groupby("track_id")["class_name"]
+        .agg(lambda values: " / ".join(
+            f"{name.upper()} {count}" for name, count in values.value_counts().items()
+        ))
+)
 ledger["coverage"] = (ledger.observations / (ledger.last_frame - ledger.first_frame + 1).clip(lower=1)).round(3)
-ledger.columns = ["TRACK ID", "FIRST FRAME", "LAST FRAME", "OBSERVATIONS", "CLASS", "FRAME COVERAGE"]
+ledger = ledger[["track_id", "first_frame", "last_frame", "observations", "dominant_class", "class_variants", "coverage"]]
+ledger.columns = ["TRACK ID", "FIRST FRAME", "LAST FRAME", "OBSERVATIONS", "DOMINANT CLASS", "CLASS DISTRIBUTION", "FRAME COVERAGE"]
 st.dataframe(ledger, use_container_width=True, hide_index=True)
 st.download_button("EXPORT TRACK LEDGER", ledger.to_csv(index=False).encode("utf-8"),
                    "swarm_track_ledger.csv", "text/csv")
