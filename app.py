@@ -281,7 +281,7 @@ with left:
             if cv2 is not None:
                 frame = read_video_frame(str(video), int(selected_frame), video.stat().st_mtime)
                 if frame is not None:
-                    st.image(frame, use_container_width=True)
+                    st.image(frame, width="stretch")
                     st.caption("Still frame decoded independently from the recorded video; it does not control the video player's playback position.")
                 else:
                     st.warning("Selected frame could not be decoded.")
@@ -305,7 +305,7 @@ st.markdown('<div class="section-label">03 / Track geometry & temporal history</
 geometry_col, ledger_col = st.columns([1.55, 1], gap="medium")
 with geometry_col:
     st.plotly_chart(track_figure(data, selected_id, int(selected_frame)),
-                    use_container_width=True, config={"displaylogo": False, "responsive": True},
+                    width="stretch", config={"displaylogo": False, "responsive": True},
                     key="swarm_track_geometry_v2")
     st.caption("Centroid trajectories in image pixels. Highlighted line = selected contact.")
 with ledger_col:
@@ -313,7 +313,7 @@ with ledger_col:
     if not current.empty:
         view = current[["track_id", "class_name", "confidence", "cx", "cy"]].copy()
         view.columns = ["TRACK", "FRAME CLASS", "CONF", "X / PX", "Y / PX"]
-        st.dataframe(view, use_container_width=True, hide_index=True, height=245)
+        st.dataframe(view, width="stretch", hide_index=True, height=245)
     else:
         st.info("No detections in selected frame.")
 
@@ -341,7 +341,7 @@ ledger["class_variants"] = ledger["track_id"].map(
 ledger["coverage"] = (ledger.observations / (ledger.last_frame - ledger.first_frame + 1).clip(lower=1)).round(3)
 ledger = ledger[["track_id", "first_frame", "last_frame", "observations", "dominant_class", "class_variants", "coverage"]]
 ledger.columns = ["TRACK ID", "FIRST FRAME", "LAST FRAME", "OBSERVATIONS", "DOMINANT CLASS", "CLASS DISTRIBUTION", "FRAME COVERAGE"]
-st.dataframe(ledger, use_container_width=True, hide_index=True)
+st.dataframe(ledger, width="stretch", hide_index=True)
 st.download_button("EXPORT TRACK LEDGER", ledger.to_csv(index=False).encode("utf-8"),
                    "swarm_track_ledger.csv", "text/csv")
 
