@@ -98,7 +98,6 @@ def sensitivity(dist: float, radius: float, s0: float = 0.92) -> float:
     return s0 + t * (0.60 - s0)
 
 
-_sense_seq: dict[int, int] = {}
 
 
 def sense(
@@ -115,8 +114,8 @@ def sense(
     s0 = cfg.detector.sensitivity
     f = cfg.detector.false_alarm
 
-    seq = _sense_seq.get(drone.id, 0) + 1
-    _sense_seq[drone.id] = seq
+    seq = world.sensor_sequences.get(drone.id, 0) + 1
+    world.sensor_sequences[drone.id] = seq
 
     target_cells = {tg.cell_idx for tg in world.targets}
     clutter_cells = {c.cell_idx for c in world.clutter}
@@ -153,7 +152,3 @@ def sense(
         observations=obs_list,
     )
 
-
-def reset_sense_seq() -> None:
-    """Clear sequence counters (call between independent runs)."""
-    _sense_seq.clear()
