@@ -47,6 +47,7 @@ class World:
     wind: np.ndarray = field(default_factory=lambda: np.zeros(2))
     gust_ar1: float = 0.0
     rng: Generator | None = None
+    sensor_sequences: dict[int, int] = field(default_factory=dict, repr=False)
 
     @property
     def n_cells(self) -> int:
