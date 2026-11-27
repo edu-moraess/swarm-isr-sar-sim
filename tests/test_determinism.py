@@ -7,12 +7,11 @@ from swarm_core.config import MissionConfig, PerceptionConfig, SwarmConfig
 from swarm_core.drone import create_drones, step_drone
 from swarm_core.events import EventLog
 from swarm_core.rng import RNGManager
-from swarm_core.sensors import reset_sense_seq, sense
+from swarm_core.sensors import sense
 from swarm_core.world import build_world
 
 
 def _run_short(seed: int) -> str:
-    reset_sense_seq()
     rng_mgr = RNGManager(seed)
     world_rng = rng_mgr.spawn("world")[0]
     sensor_rng = rng_mgr.spawn("sensors")[0]
