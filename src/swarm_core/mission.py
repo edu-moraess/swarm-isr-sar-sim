@@ -82,6 +82,7 @@ class MissionLoop:
         self.swarm_config = swarm
         self.perception_config = perception
         self.network_config = network or NetworkConfig()
+        self.network_profile = network_profile
         if network_profile not in self.network_config.profiles:
             raise ValueError(f"Unknown network profile: {network_profile}")
 
@@ -153,9 +154,7 @@ class MissionLoop:
             mission_id=self.mission_config.mission_id,
             seed=self.mission_config.seed,
             drone_count=len(self.drones),
-            network_profile=self.network_config.profiles[
-                self.network.profile_name
-            ].model_dump() if hasattr(self.network, "profile_name") else None,
+            network_profile=self.network_profile,
         )
 
     def _begin_search(self) -> None:
