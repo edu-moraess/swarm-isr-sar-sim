@@ -97,13 +97,9 @@ class MissionLoop:
         self.dynamics_rngs = self.rng.spawn("drone_dynamics", swarm.n_drones)
         self.sensor_rngs = self.rng.spawn("drone_sensors", swarm.n_drones)
 
-        self.world: World = build_world(
-            mission, world_rng, obstacle_fraction=obstacle_fraction
-        )
+        self.world: World = build_world(mission, world_rng, obstacle_fraction=obstacle_fraction)
         self.drones: list[Drone] = create_drones(swarm, mission.base, drone_rng)
-        self.network = make_network(
-            self.network_config, network_profile, network_rng
-        )
+        self.network = make_network(self.network_config, network_profile, network_rng)
         self.gossip: GossipSwarm = make_gossip_swarm(
             [drone.id for drone in self.drones],
             self.world.n_cells,
@@ -159,19 +155,14 @@ class MissionLoop:
 
     def _begin_search(self) -> None:
         self._emit_phase("altitude_reached")
-        route = boustrophedon_waypoints(
-            self.world, altitude=self.swarm_config.search_alt_m
-        )
+        route = boustrophedon_waypoints(self.world, altitude=self.swarm_config.search_alt_m)
         if not route:
             raise RuntimeError("Coverage planner produced no free-cell waypoints")
         for index, drone in enumerate(self.drones):
             assigned = route[index :: len(self.drones)]
             if not assigned:
                 assigned = [route[index % len(route)]]
-            points = [
-                np.array([point.x, point.y, point.z], dtype=float)
-                for point in assigned
-            ]
+            points = [np.array([point.x, point.y, point.z], dtype=float) for point in assigned]
             self._assign_waypoints(drone, points)
         self.events.emit(
             self.clock.t,
@@ -190,9 +181,7 @@ class MissionLoop:
                 t,
                 self.sensor_rngs[index],
             )
-            self.observed_cells.update(
-                observation.cell_idx for observation in batch.observations
-            )
+            self.observed_cells.update(observation.cell_idx for observation in batch.observations)
             self.gossip.publish(
                 batch,
                 t=t,
@@ -211,18 +200,14 @@ class MissionLoop:
         bx, by = self.mission_config.base[:2]
         altitude = self.swarm_config.search_alt_m
         for drone in self.drones:
-            self._assign_waypoints(
-                drone, [np.array([bx, by, altitude], dtype=float)]
-            )
+            self._assign_waypoints(drone, [np.array([bx, by, altitude], dtype=float)])
         self.events.emit(t=self.clock.t, kind="return_started")
 
     def _begin_landing(self) -> None:
         self._emit_phase("at_base")
         bx, by = self.mission_config.base[:2]
         for drone in self.drones:
-            self._assign_waypoints(
-                drone, [np.array([bx, by, 0.0], dtype=float)]
-            )
+            self._assign_waypoints(drone, [np.array([bx, by, 0.0], dtype=float)])
         self.events.emit(t=self.clock.t, kind="landing_started")
 
     def step(self) -> MissionRunResult:
@@ -247,8 +232,7 @@ class MissionLoop:
 
         if self.fsm.phase == MissionPhase.TAKEOFF:
             if all(
-                drone.position[2] >= self.swarm_config.search_alt_m - 1.5
-                for drone in self.drones
+                drone.position[2] >= self.swarm_config.search_alt_m - 1.5 for drone in self.drones
             ):
                 self._begin_search()
 
@@ -259,25 +243,17 @@ class MissionLoop:
             if self.clock.step % self.sense_period_steps == 0:
                 sent = self.gossip.retransmit(t)
                 self.events.emit(t, "gossip_retransmit", sent=sent)
-            if all(
-                drone.wp_idx >= len(drone.waypoints)
-                for drone in self.drones
-            ):
+            if all(drone.wp_idx >= len(drone.waypoints) for drone in self.drones):
                 self._return_to_base()
 
         elif self.fsm.phase == MissionPhase.RETURN:
-            if all(
-                drone.wp_idx >= len(drone.waypoints)
-                for drone in self.drones
-            ):
+            if all(drone.wp_idx >= len(drone.waypoints) for drone in self.drones):
                 self._begin_landing()
 
-        elif self.fsm.phase == MissionPhase.LAND:
-            if all(
-                drone.wp_idx >= len(drone.waypoints)
-                and drone.position[2] <= 1.5
-                for drone in self.drones
-            ):
+        elif self.fsm.phase == MissionPhase.LAND and all(
+            drone.wp_idx >= len(drone.waypoints) and drone.position[2] <= 1.5
+            for drone in self.drones
+        ):
                 self._emit_phase("landed")
                 self._completion_reason = "coverage_routes_completed"
                 self.events.emit(
@@ -328,9 +304,7 @@ class MissionLoop:
         if self.finished:
             return self.result()
 
-        time_limit_steps = max(
-            1, int(math.ceil(self.mission_config.time_limit_s / self.clock.dt))
-        )
+        time_limit_steps = max(1, int(math.ceil(self.mission_config.time_limit_s / self.clock.dt)))
         limit = time_limit_steps
         if max_steps is not None:
             if max_steps < 1:
@@ -342,7 +316,8 @@ class MissionLoop:
 
         if not self.finished:
             self._completion_reason = (
-                "step_limit" if max_steps is not None and max_steps < time_limit_steps
+                "step_limit"
+                if max_steps is not None and max_steps < time_limit_steps
                 else "time_limit"
             )
             self.events.emit(
