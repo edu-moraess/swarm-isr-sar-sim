@@ -29,7 +29,7 @@ Os objetivos quantitativos O1–O6 são metas de pesquisa. Eles não devem ser i
 
 ## Estado executável atual
 
-O núcleo Python e seus testes automatizados estão presentes. A CLI, o orquestrador de cenários, a geração de relatórios e o runner de experimentos ainda não foram implementados. Por isso, os comandos swarm-sim, make smoke, make report e make experiments não são apresentados como funcionalidades disponíveis.
+O núcleo Python e seus testes automatizados estão presentes. O MissionLoop v0 oferece uma orquestração determinística mínima de uma missão sintética no Tier A. A CLI, o runner configurável de cenários, a geração de relatórios e o runner de experimentos ainda não foram implementados. Por isso, os comandos swarm-sim, make smoke, make report e make experiments não são apresentados como funcionalidades disponíveis.
 
 ## Quickstart — validação do núcleo
 
