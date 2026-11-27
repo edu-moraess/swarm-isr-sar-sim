@@ -254,14 +254,14 @@ class MissionLoop:
             drone.wp_idx >= len(drone.waypoints) and drone.position[2] <= 1.5
             for drone in self.drones
         ):
-                self._emit_phase("landed")
-                self._completion_reason = "coverage_routes_completed"
-                self.events.emit(
-                    t,
-                    "mission_completed",
-                    reason=self._completion_reason,
-                    coverage_pct=self._coverage_pct(),
-                )
+            self._emit_phase("landed")
+            self._completion_reason = "coverage_routes_completed"
+            self.events.emit(
+                t,
+                "mission_completed",
+                reason=self._completion_reason,
+                coverage_pct=self._coverage_pct(),
+            )
 
         self.events.emit(
             t,
