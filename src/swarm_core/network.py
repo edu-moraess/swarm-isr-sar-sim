@@ -58,10 +58,7 @@ class NetworkSim:
     def _same_partition(self, a: int, b: int) -> bool:
         if not self.partition_active or not self.groups:
             return True
-        for g in self.groups:
-            if a in g and b in g:
-                return True
-        return False
+        return any(a in group and b in group for group in self.groups)
 
     def _loss_pct(self, src: int, dst: int, pos: tuple[float, float] | None = None) -> float:
         base = self.profile.loss_pct
@@ -88,6 +85,7 @@ class NetworkSim:
         pos: tuple[float, float] | None = None,
         seq: int = 0,
     ) -> bool:
+        self.set_time(t)
         self.send_count += 1
         if dst != -1 and not self._same_partition(src, dst):
             self.drop_count += 1

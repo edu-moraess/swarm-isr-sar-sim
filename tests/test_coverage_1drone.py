@@ -12,14 +12,13 @@ from swarm_core.config import MissionConfig, PerceptionConfig, SwarmConfig
 from swarm_core.drone import create_drones, step_drone
 from swarm_core.planning.boustrophedon import boustrophedon_waypoints
 from swarm_core.rng import RNGManager
-from swarm_core.sensors import reset_sense_seq, sense
+from swarm_core.sensors import sense
 from swarm_core.world import build_world
 
 
 def test_one_drone_coverage_ge_90() -> None:
     t0 = time.perf_counter()
     seed = 0
-    reset_sense_seq()
     rng_mgr = RNGManager(seed)
     world_rng = rng_mgr.spawn("world")[0]
     sensor_rng = rng_mgr.spawn("sensors")[0]

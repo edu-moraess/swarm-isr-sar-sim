@@ -67,3 +67,14 @@ Formato curto: Contexto → Decisão → Alternativas → Consequência.
 **Decisão**: Usar exclusivamente `ruff format` (e `ruff check`). Removido black do pipeline.
 
 **Consequência**: `make lint` e pre-commit usam apenas ruff. Configuração centralizada em pyproject.toml.
+
+
+## ADR-008 — Sincronização Gossip por watermark confirmado
+
+**Contexto**: O flood epidêmico reenviava todo o histórico para todos os peers, sem registrar o progresso individual de cada destinatário. Isso gerava tráfego redundante e não correspondia ao contrato documentado de sincronização a partir do watermark do receptor.
+
+**Decisão**: Cada nó mantém watermarks de aplicação confirmados por peer e origem. Ao receber um lote, o destinatário envia uma confirmação com seus watermarks contíguos; o emissor retransmite apenas lotes posteriores ao watermark confirmado. Lotes da própria origem do peer não são enviados de volta a ele. Se o lote ou a confirmação se perder, o watermark não avança e o lote permanece elegível para retransmissão.
+
+**Alternativas**: Flood completo em todo ciclo; estado de sincronização centralizado fora dos nós; ACK por lote individual.
+
+**Consequência**: O mecanismo reduz retransmissões redundantes e recupera perdas por repetição idempotente. O modelo de ACK é simulado pelo NetworkSim e não representa ainda um protocolo de transporte distribuído em produção. Testes devem cobrir progresso independente por peer, perda de lote, perda de ACK, partições e convergência.

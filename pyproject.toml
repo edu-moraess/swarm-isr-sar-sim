@@ -31,7 +31,6 @@ dependencies = [
     "pandas>=2.1",
     "jinja2>=3.1",
     "rich>=13.7",
-    "click>=8.1",
 ]
 
 [project.optional-dependencies]
@@ -55,8 +54,6 @@ experiments = [
     "seaborn>=0.13",
 ]
 
-[project.scripts]
-swarm-sim = "swarm_core.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

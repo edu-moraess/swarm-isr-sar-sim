@@ -1,11 +1,10 @@
 # swarm-isr-sar-sim
 
-**Enxame de drones para ISR e Search-and-Rescue (SAR) em simulação**
+**Simulador multiagente de drones para Search-and-Rescue (SAR) e Intelligence, Surveillance and Reconnaissance (ISR).**
 
-> Portfólio avançado · Engenharia de Computação / Robótica / Sistemas Distribuídos  
-> Nível: TCC / pesquisa aplicada · Licença MIT · Python 3.11+
+> Pesquisa aplicada em sistemas distribuídos, robótica e inteligência multiagente.  
+> Python 3.11+ · Licença MIT
 
-[![CI](https://github.com/edu-moraess/swarm-isr-sar-sim/actions/workflows/ci.yml/badge.svg)](https://github.com/edu-moraess/swarm-isr-sar-sim/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
@@ -13,94 +12,89 @@
 
 ## Visão geral
 
-Sistema de enxame de drones **estritamente simulado** para missões de:
+O projeto implementa um ambiente **estritamente simulado** para estudar coordenação, percepção e compartilhamento de informação entre agentes autônomos.
 
-- **SAR** (Search-and-Rescue): cobertura bayesiana de área, detecção e confirmação de alvos sintéticos.
-- **ISR** (Intelligence, Surveillance, Reconnaissance): setores com prioridade, minimização de staleness, relay e alertas de eventos.
+- **SAR:** cobertura de área, observações e atualização probabilística de crença.
+- **ISR:** exploração por setores, compartilhamento de observações e eventos.
+- **Sistemas distribuídos:** comunicação sujeita a latência, perda de pacotes e partições.
 
-Arquitetura em **duas camadas**:
+A arquitetura está organizada em duas camadas planejadas:
 
-| Camada | Tecnologia | Responsabilidade |
-|--------|------------|------------------|
-| **Tier A** | Python puro (numpy, scipy, pydantic) | Toda a lógica: crença, planejamento, alocação (CBBA), consenso, rede, FSM, métricas |
-| **Tier B** | ROS 2 Humble + Gazebo Harmonic + PX4 SITL | Adaptadores finos, mundos, launch, impairments, dashboard Foxglove |
+| Camada | Responsabilidade |
+|---|---|
+| **Tier A — Python** | Núcleo de simulação, crença, planejamento, rede, FSM, energia e coordenação. |
+| **Tier B — ROS 2 / Gazebo / PX4** | Integração robótica e simulação física, ainda não disponível neste snapshot. |
 
-Critérios quantitativos de aceite (O1–O6) são medidos **exclusivamente** no Tier A.
+Os objetivos quantitativos O1–O6 são metas de pesquisa. Eles não devem ser interpretados como resultados já demonstrados.
 
-## Quickstart (≤ 5 comandos)
+## Estado executável atual
 
-```bash
+O núcleo Python e seus testes automatizados estão presentes. O MissionLoop v0 oferece uma orquestração determinística mínima de uma missão sintética no Tier A. A CLI, o runner configurável de cenários, a geração de relatórios e o runner de experimentos ainda não foram implementados. Por isso, os comandos swarm-sim, make smoke, make report e make experiments não são apresentados como funcionalidades disponíveis.
+
+## Quickstart — validação do núcleo
+
+\`\`\`bash
 git clone https://github.com/edu-moraess/swarm-isr-sar-sim.git
 cd swarm-isr-sar-sim
-make setup
-make smoke          # S1 seed 0 → results/smoke
-swarm-sim report --run-dir results/smoke --output report.html
-```
+python -m pip install -e ".[dev,report,experiments]"
+pytest
+\`\`\`
 
-Abra `report.html` no navegador (funciona no celular).
+Validações adicionais:
 
-## Objetivos mensuráveis
+\`\`\`bash
+ruff check src tests
+ruff format --check src tests
+mypy src/swarm_core
+\`\`\`
 
-| ID | Objetivo | Medida |
-|----|----------|--------|
-| O1 | Cobertura ≥ 90 % em ≤ 15 min, ≥ 10 drones, 200×200 m | % células livres com ≥ 1 observação válida |
-| O2 | ≥ 90 % alvos detectados, FP ≤ 5 % | detecção / total; FP em clutter |
-| O3 | Perda de até 3 nós → re-tarefa ≤ 30 s | latência do timeout de heartbeat à nova atribuição |
-| O4 | 20 % perda + 200 ms latência | cobertura ≥ 90 %, sem tarefa duplicada > 5 s |
-| O5 | Failover de líder ≤ 10 s | até SwarmState do novo líder aceito por ≥ 80 % dos nós vivos |
-| O6 | Relatório com métricas + 2+ baselines | 30 seeds, IC 95 %, teste estatístico |
+No Colab, os mesmos comandos podem ser executados após clonar o repositório. O projeto não exige ROS 2, Gazebo ou PX4 para testar o Tier A.
 
-## Estrutura do repositório
+## Objetivos mensuráveis planejados
 
-```
-swarm-isr-sar-sim/
-├── src/swarm_core/          # Tier A (toda a lógica)
-├── tests/                   # pytest + hypothesis
-├── config/                  # mission.yaml, swarm.yaml, …
-├── analysis/                # experimentos e geração de EXPERIMENTS.md
-├── docker/                  # Tier B (a partir do Lote 9)
-├── worlds/                  # SDF Gazebo
-├── docs/                    # DECISIONS, ETHICS, UNVERIFIED, ARCHITECTURE…
-├── scripts/                 # materialize, verify_all, git_init
-├── notebooks/               # Colab quickstart
-└── results/                 # CSVs, figuras, reports
-```
+| ID | Objetivo | Medida proposta |
+|---|---|---|
+| O1 | Cobertura de área | ≥ 90% em até 15 min, com ≥ 10 drones em área 200 × 200 m |
+| O2 | Detecção de alvos sintéticos | ≥ 90% de detecção e ≤ 5% de falsos positivos |
+| O3 | Retarefa após perda de nós | Até 30 s após detecção da falha |
+| O4 | Robustez de rede | Avaliação com 20% de perda e 200 ms de latência |
+| O5 | Failover de liderança | Até 10 s, conforme critério distribuído formalizado |
+| O6 | Reprodutibilidade experimental | 30 seeds, intervalos de confiança e baselines |
 
-## Comandos principais
+Essas metas ainda dependem da implementação dos módulos de alocação, consenso, execução de cenários e protocolo experimental.
 
-```bash
-make setup          # instala + pre-commit
-make lint           # ruff check + ruff format --check
-make typecheck      # mypy strict
-make test           # pytest + cobertura
-make smoke          # S1 rápido → results/smoke
-make experiments    # protocolo completo (S1–S7 × 30 seeds)
-make report         # gera report.html
-make verify         # scripts/verify_all.py → docs/VERIFICATION.md
-```
+## Estrutura presente
+
+\`\`\`text
+src/swarm_core/    Núcleo Python
+tests/             Testes automatizados
+config/            Configurações YAML
+docs/              Decisões arquiteturais e escopo ético
+scripts/           Ferramentas de materialização
+results/           Diretório reservado para resultados
+\`\`\`
+
+Diretórios de experimentos, integração ROS 2/Gazebo/PX4 e relatórios serão adicionados quando seus respectivos módulos forem implementados.
 
 ## Ética e escopo
 
-Ambiente **estritamente simulado**, educacional e de pesquisa.  
-Dados sintéticos. Sem instruções de armamento, targeting real ou identificação de pessoas.  
-Veja [docs/ETHICS.md](docs/ETHICS.md).
+Ambiente estritamente simulado, educacional e de pesquisa. O escopo atual utiliza ambientes e observações sintéticos; não contempla targeting real, armamento ou identificação de pessoas.
 
-## Status de desenvolvimento
+Consulte [docs/ETHICS.md](docs/ETHICS.md) e [docs/UNVERIFIED.md](docs/UNVERIFIED.md).
 
-| Fase | Lote | Status |
-|------|------|--------|
-| Scaffolding | 0 | Completo |
-| Core primitives | 1 | — |
-| Planning + FSM | 2 | — |
-| Network + Consensus | 3 | — |
-| Allocation + Retask | 4 | — |
-| Sim + CLI + Smoke | 5 | — |
-| Operator + Report | 6 | — |
-| Experimentos | 7 | — |
-| Tier B interfaces | 8 | — |
-| Docker / PX4 / Gazebo | 9 | — |
-| Documentação final | 10 | — |
-| Verificação completa | 11 | — |
+## Roadmap de implementação
+
+| Lote | Escopo | Situação |
+|---|---|---|
+| 0 | Scaffolding | Presente |
+| 1–2 | Primitivas, planejamento e FSM | Parcialmente implementados |
+| 3 | Rede e inteligência distribuída | Em consolidação |
+| 4 | Alocação e retarefa | Pendente |
+| 5 | Orquestração, CLI e smoke test | Pendente |
+| 6 | Interface de operação e relatórios | Pendente |
+| 7 | Experimentos reproduzíveis | Pendente |
+| 8–9 | Interfaces ROS 2, Gazebo e PX4 | Pendente |
+| 10–11 | Documentação e verificação integrada | Pendente |
 
 ## Licença
 
