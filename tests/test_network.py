@@ -39,3 +39,17 @@ def test_partition_blocks_cross_group() -> None:
     assert net.partition_active
     ok_cross = net.send(1, 3, "ping", "b", t=10.0)
     assert ok_cross is False
+
+
+def test_send_uses_explicit_time_for_partition_state() -> None:
+    rng = RNGManager(0).spawn("net")[0]
+    cfg = NetworkConfig()
+    cfg.profiles["partition"].partition = {
+        "start_s": 1.0, "duration_s": 5.0, "groups": [[1], [2]],
+    }
+    net = make_network(cfg, "partition", rng)
+
+    # No explicit set_time(): send() must honor its own timestamp.
+    assert net.send(1, 2, "ping", "blocked", t=1.0) is False
+    assert net.partition_active is True
+    assert net.drop_count == 1
