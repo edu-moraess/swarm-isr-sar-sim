@@ -85,6 +85,7 @@ class NetworkSim:
         pos: tuple[float, float] | None = None,
         seq: int = 0,
     ) -> bool:
+        self.set_time(t)
         self.send_count += 1
         if dst != -1 and not self._same_partition(src, dst):
             self.drop_count += 1
