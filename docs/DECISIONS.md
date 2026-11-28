@@ -122,3 +122,14 @@ Formato curto: Contexto → Decisão → Alternativas → Consequência.
 **Limites**: `World` continua sendo o modelo ambiental usado para células livres, linha de visada, alvos e clutter. Esta separação evita acesso à pose física do drone pelo sensor, mas não transforma o ambiente simulado em mapa local independente nem remove o oráculo ambiental do simulador. A pose estimada deriva do GPS reportado e, portanto, pode alterar footprint, observações, cobertura e hash de eventos em relação ao baseline que usava posição verdadeira.
 
 **Consequência**: A percepção passa a consumir o contrato local por agente, sem importar ou receber `Drone`. A validação deve demonstrar que o sensor responde à pose estimada, que o contrato é imutável, que o fluxo de missão termina e que os resultados permanecem determinísticos para uma mesma seed. A igualdade com o hash do baseline físico não é critério esperado para esta mudança de semântica.
+
+
+## ADR-013 — Agent-local route-lane assignment (P2.1)
+
+**Contexto**: O gerador boustrophedon produz uma rota geométrica global a partir do ambiente, enquanto a atribuição legada distribuía lanes intercaladas aos drones pela ordem de ID. A fronteira de percepção já consome `AgentLocalState`; o próximo passo é fazer a alocação inicial de lanes considerar a estimativa local de cada agente, sem introduzir acesso do planejador à pose física verdadeira.
+
+**Decisão**: Manter a geometria e a ordem dos waypoints produzidos por `boustrophedon_waypoints`. Criar `assign_route_lanes`, que constrói as mesmas lanes intercaladas e associa cada lane ao agente com menor distância 3D entre sua posição estimada e o primeiro waypoint da lane. O matching é um greedy determinístico; empates são resolvidos por ID do agente e índice da lane. O `MissionLoop` fornece os snapshots mais recentes de `agent_local_states` quando inicia SEARCH.
+
+**Limites**: A rota ainda é gerada usando `World` como modelo ambiental global; esta etapa não cria mapas locais, não altera a geometria de cobertura, não implementa replanejamento online e não garante uma atribuição globalmente ótima. Se houver mais agentes do que waypoints, preserva-se o fallback legado, que pode atribuir o mesmo waypoint a mais de um agente. A dinâmica física continua seguindo waypoints com o estado verdadeiro do simulador.
+
+**Consequência**: A atribuição passa a depender de estimativas locais em vez da correspondência fixa ID→lane, com testes de determinismo, identidade, preservação de waypoints e fallback. A validação de missão deve comparar duas execuções com a mesma seed, verificar cobertura, conclusão, cadeia de eventos e métricas de rede; igualdade com hashes anteriores não é critério, pois a associação das lanes pode mudar o comportamento.
