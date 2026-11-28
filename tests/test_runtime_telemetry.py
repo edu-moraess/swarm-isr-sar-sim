@@ -147,7 +147,6 @@ def test_runtime_local_state_updates_from_reported_telemetry() -> None:
     assert current.battery_pct == drone.battery_pct
 
 
-
 def test_telemetry_adapter_has_no_physical_simulator_dependency() -> None:
     source = Path("src/swarm_core/telemetry.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
