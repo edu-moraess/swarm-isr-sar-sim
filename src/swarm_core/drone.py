@@ -76,8 +76,15 @@ def step_drone(
     rng: Generator,
     a_max: float = 2.0,
     tol: float = 1.5,
+    arrival_speed_mps: float = 0.25,
 ) -> None:
-    """Integrate point-mass dynamics toward current waypoint."""
+    """Integrate a bounded-acceleration point mass with braking near waypoints.
+
+    The desired speed is limited by both cruise speed and a stopping-distance
+    envelope. A waypoint is consumed only after position and speed tolerances
+    are simultaneously satisfied; this avoids carrying high residual velocity
+    through a waypoint.
+    """
     if not drone.alive:
         return
 
@@ -89,21 +96,29 @@ def step_drone(
         target = drone.waypoints[drone.wp_idx]
         err = target - drone.position
         dist = float(np.linalg.norm(err))
-        if dist < tol:
-            drone.wp_idx += 1
+        if dist > 1e-9:
+            direction = err / dist
+            stopping_speed = float(np.sqrt(2.0 * a_max * dist))
+            proportional_speed = 1.5 * dist
+            desired_speed = min(swarm.cruise_mps, stopping_speed, proportional_speed)
+            desired_v = direction * desired_speed
         else:
-            desired_v = err / max(dist, 1e-6) * min(swarm.cruise_mps, dist / dt)
-            dv = desired_v - drone.velocity
-            max_dv = a_max * dt
-            if np.linalg.norm(dv) > max_dv:
-                dv = dv / np.linalg.norm(dv) * max_dv
-            drone.velocity = drone.velocity + dv
+            desired_v = np.zeros(3)
+
+        dv = desired_v - drone.velocity
+        max_dv = a_max * dt
+        dv_norm = float(np.linalg.norm(dv))
+        if dv_norm > max_dv:
+            dv = dv / dv_norm * max_dv
+        drone.velocity = drone.velocity + dv
+
+        if dist <= tol and float(np.linalg.norm(drone.velocity)) <= arrival_speed_mps:
+            drone.wp_idx += 1
     else:
         drone.velocity *= 0.9
 
     wind = world.wind_velocity()
     drone.velocity[:2] += wind * dt * 0.1
-
     drone.position = drone.position + drone.velocity * dt
 
     noise = rng.normal(0, gps_sigma, size=3)
