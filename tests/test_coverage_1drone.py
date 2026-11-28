@@ -13,6 +13,7 @@ from swarm_core.drone import create_drones, step_drone
 from swarm_core.planning.boustrophedon import boustrophedon_waypoints
 from swarm_core.rng import RNGManager
 from swarm_core.sensors import sense
+from swarm_core.telemetry import AgentTelemetryAdapter
 from swarm_core.world import build_world
 
 
@@ -30,6 +31,7 @@ def test_one_drone_coverage_ge_90() -> None:
     world = build_world(mission, world_rng, obstacle_fraction=0.02)
     drones = create_drones(swarm, mission.base, drone_rng)
     drone = drones[0]
+    telemetry = AgentTelemetryAdapter(source_id=drone.id)
 
     wps = boustrophedon_waypoints(world, altitude=30.0)
     drone.waypoints = [np.array([p.x, p.y, p.z]) for p in wps]
@@ -47,7 +49,12 @@ def test_one_drone_coverage_ge_90() -> None:
         t = clock.tick()
         step_drone(drone, clock.dt, swarm, swarm.battery, world, perc.gps_sigma_m, drone_rng)
         if step % sense_period == 0:
-            batch = sense(drone, world, perc, t, sensor_rng)
+            local_state = telemetry.update(
+                timestamp_s=t,
+                reported_position=drone.reported_position(),
+                battery_pct=drone.battery_pct,
+            )
+            batch = sense(local_state, world, perc, t, sensor_rng)
             belief.update_batch(batch)
             for o in batch.observations:
                 observed.add(o.cell_idx)
