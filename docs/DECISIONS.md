@@ -111,3 +111,14 @@ Formato curto: Contexto → Decisão → Alternativas → Consequência.
 
 **Consequência**: A telemetria local passa a existir no runtime, por agente e com histórico temporal independente, sem alterar RNG, eventos ou fluxo de missão. A paridade do EventLog e do resultado de missão deve ser verificada no Colab. A bateria ainda é fornecida pelo valor reportado atual do simulador, sem ruído ou atraso; o estimador de velocidade permanece uma diferença finita simples.
 
+
+
+## ADR-012 — Agent-local perception input (P2.1)
+
+**Contexto**: O modelo de sensores ainda recebia o objeto físico `Drone` e calculava footprint e distância diretamente a partir de `drone.position`. Isso permitia que a percepção do agente contornasse o contrato `AgentLocalState`, mesmo após a telemetria local passar a existir no runtime.
+
+**Decisão**: Alterar `sense()` e `cells_in_footprint()` para receberem o snapshot imutável `AgentLocalState`. A geometria do footprint, altitude e distância das observações passa a usar exclusivamente `estimated_position_xyz_m`; a identidade e sequência do sensor usam `source_id`. O MissionLoop fornece o snapshot mais recente e também usa a posição estimada como contexto espacial para o envio ao Gossip.
+
+**Limites**: `World` continua sendo o modelo ambiental usado para células livres, linha de visada, alvos e clutter. Esta separação evita acesso à pose física do drone pelo sensor, mas não transforma o ambiente simulado em mapa local independente nem remove o oráculo ambiental do simulador. A pose estimada deriva do GPS reportado e, portanto, pode alterar footprint, observações, cobertura e hash de eventos em relação ao baseline que usava posição verdadeira.
+
+**Consequência**: A percepção passa a consumir o contrato local por agente, sem importar ou receber `Drone`. A validação deve demonstrar que o sensor responde à pose estimada, que o contrato é imutável, que o fluxo de missão termina e que os resultados permanecem determinísticos para uma mesma seed. A igualdade com o hash do baseline físico não é critério esperado para esta mudança de semântica.

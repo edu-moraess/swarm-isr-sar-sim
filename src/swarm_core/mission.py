@@ -232,8 +232,9 @@ class MissionLoop:
     def _sense_and_share(self) -> None:
         t = self.clock.t
         for index, drone in enumerate(self.drones):
+            local_state = self.agent_local_states[drone.id]
             batch = sense(
-                drone,
+                local_state,
                 self.world,
                 self.perception_config,
                 t,
@@ -243,7 +244,7 @@ class MissionLoop:
             self.gossip.publish(
                 batch,
                 t=t,
-                pos=(float(drone.position[0]), float(drone.position[1])),
+                pos=local_state.estimated_position_xyz_m[:2],
             )
             self.events.emit(
                 t,
