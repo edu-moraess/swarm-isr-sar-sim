@@ -108,6 +108,7 @@ class MissionLoop:
         self.fsm = MissionFSM()
         self.events = EventLog()
         self.observed_cells: set[int] = set()
+        self.landing_positions: dict[int, np.ndarray] = {}
         self._started = False
         self._completion_reason = "not_started"
 
@@ -131,6 +132,43 @@ class MissionLoop:
     def _assign_waypoints(self, drone: Drone, points: list[np.ndarray]) -> None:
         drone.waypoints = [point.astype(float, copy=True) for point in points]
         drone.wp_idx = 0
+
+    def _make_landing_positions(self) -> dict[int, np.ndarray]:
+        """Create deterministic, separated landing pads around the configured base."""
+        count = len(self.drones)
+        cols = int(math.ceil(math.sqrt(count)))
+        rows = int(math.ceil(count / cols))
+        spacing = max(3.0, min(6.0, self.swarm_config.formation.spacing_m * 0.25))
+        bx, by = self.mission_config.base[:2]
+        positions: dict[int, np.ndarray] = {}
+        for index, drone in enumerate(self.drones):
+            row, col = divmod(index, cols)
+            x_offset = (col - (cols - 1) / 2.0) * spacing
+            y_offset = (row - (rows - 1) / 2.0) * spacing
+            positions[drone.id] = np.array(
+                [bx + x_offset, by + y_offset, 0.0],
+                dtype=float,
+            )
+        return positions
+
+    def _all_drones_landed(self) -> bool:
+        """Require pad proximity, near-zero altitude and low residual velocity."""
+        for drone in self.drones:
+            target = self.landing_positions.get(drone.id)
+            if target is None or drone.wp_idx < len(drone.waypoints):
+                return False
+            horizontal_error = float(np.linalg.norm(drone.position[:2] - target[:2]))
+            altitude_error = abs(float(drone.position[2] - target[2]))
+            horizontal_speed = float(np.linalg.norm(drone.velocity[:2]))
+            vertical_speed = abs(float(drone.velocity[2]))
+            if (
+                horizontal_error > 0.25
+                or altitude_error > 0.20
+                or horizontal_speed > 0.20
+                or vertical_speed > 0.20
+            ):
+                return False
+        return True
 
     def start(self) -> None:
         """Start the mission and command all drones to search altitude."""
@@ -205,10 +243,23 @@ class MissionLoop:
 
     def _begin_landing(self) -> None:
         self._emit_phase("at_base")
-        bx, by = self.mission_config.base[:2]
+        self.landing_positions = self._make_landing_positions()
         for drone in self.drones:
-            self._assign_waypoints(drone, [np.array([bx, by, 0.0], dtype=float)])
-        self.events.emit(t=self.clock.t, kind="landing_started")
+            pad = self.landing_positions[drone.id]
+            self._assign_waypoints(drone, [pad])
+            self.events.emit(
+                self.clock.t,
+                "landing_pad_assigned",
+                drone_id=drone.id,
+                pad_x_m=float(pad[0]),
+                pad_y_m=float(pad[1]),
+                pad_z_m=float(pad[2]),
+            )
+        self.events.emit(
+            t=self.clock.t,
+            kind="landing_started",
+            pad_spacing_m=max(3.0, min(6.0, self.swarm_config.formation.spacing_m * 0.25)),
+        )
 
     def step(self) -> MissionRunResult:
         """Advance exactly one fixed simulation step."""
@@ -219,6 +270,7 @@ class MissionLoop:
 
         t = self.clock.tick()
         self.world.update_wind(self.clock.dt)
+        landing_phase = self.fsm.phase == MissionPhase.LAND
         for index, drone in enumerate(self.drones):
             step_drone(
                 drone,
@@ -228,6 +280,8 @@ class MissionLoop:
                 self.world,
                 self.perception_config.gps_sigma_m,
                 self.dynamics_rngs[index],
+                tol=0.20 if landing_phase else 1.5,
+                arrival_speed_mps=0.15 if landing_phase else 0.25,
             )
 
         if self.fsm.phase == MissionPhase.TAKEOFF:
@@ -250,10 +304,7 @@ class MissionLoop:
             if all(drone.wp_idx >= len(drone.waypoints) for drone in self.drones):
                 self._begin_landing()
 
-        elif self.fsm.phase == MissionPhase.LAND and all(
-            drone.wp_idx >= len(drone.waypoints) and drone.position[2] <= 1.5
-            for drone in self.drones
-        ):
+        elif self.fsm.phase == MissionPhase.LAND and self._all_drones_landed():
             self._emit_phase("landed")
             self._completion_reason = "coverage_routes_completed"
             self.events.emit(
