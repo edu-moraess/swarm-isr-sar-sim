@@ -134,19 +134,23 @@ class MissionLoop:
         drone.wp_idx = 0
 
     def _make_landing_positions(self) -> dict[int, np.ndarray]:
-        """Create deterministic, separated landing pads around the configured base."""
+        """Create deterministic, separated landing pads inside the mission area."""
         count = len(self.drones)
         cols = int(math.ceil(math.sqrt(count)))
         rows = int(math.ceil(count / cols))
         spacing = max(3.0, min(6.0, self.swarm_config.formation.spacing_m * 0.25))
         bx, by = self.mission_config.base[:2]
+        min_x = self.world.origin.x + 0.5
+        min_y = self.world.origin.y + 0.5
+        max_x = self.world.origin.x + self.mission_config.area.size_m[0] - (cols - 1) * spacing - 0.5
+        max_y = self.world.origin.y + self.mission_config.area.size_m[1] - (rows - 1) * spacing - 0.5
+        anchor_x = min(max(float(bx), min_x), max_x)
+        anchor_y = min(max(float(by), min_y), max_y)
         positions: dict[int, np.ndarray] = {}
         for index, drone in enumerate(self.drones):
             row, col = divmod(index, cols)
-            x_offset = (col - (cols - 1) / 2.0) * spacing
-            y_offset = (row - (rows - 1) / 2.0) * spacing
             positions[drone.id] = np.array(
-                [bx + x_offset, by + y_offset, 0.0],
+                [anchor_x + col * spacing, anchor_y + row * spacing, 0.0],
                 dtype=float,
             )
         return positions
@@ -235,15 +239,26 @@ class MissionLoop:
 
     def _return_to_base(self) -> None:
         self._emit_phase("tasks_done")
-        bx, by = self.mission_config.base[:2]
         altitude = self.swarm_config.search_alt_m
+        self.landing_positions = self._make_landing_positions()
         for drone in self.drones:
-            self._assign_waypoints(drone, [np.array([bx, by, altitude], dtype=float)])
+            pad = self.landing_positions[drone.id]
+            staging_point = np.array([pad[0], pad[1], altitude], dtype=float)
+            self._assign_waypoints(drone, [staging_point])
+            self.events.emit(
+                self.clock.t,
+                "return_staging_assigned",
+                drone_id=drone.id,
+                staging_x_m=float(staging_point[0]),
+                staging_y_m=float(staging_point[1]),
+                staging_z_m=float(staging_point[2]),
+            )
         self.events.emit(t=self.clock.t, kind="return_started")
 
     def _begin_landing(self) -> None:
         self._emit_phase("at_base")
-        self.landing_positions = self._make_landing_positions()
+        if not self.landing_positions:
+            self.landing_positions = self._make_landing_positions()
         for drone in self.drones:
             pad = self.landing_positions[drone.id]
             self._assign_waypoints(drone, [pad])
@@ -282,6 +297,7 @@ class MissionLoop:
                 self.dynamics_rngs[index],
                 tol=0.20 if landing_phase else 1.5,
                 arrival_speed_mps=0.15 if landing_phase else 0.25,
+                braking=landing_phase,
             )
 
         if self.fsm.phase == MissionPhase.TAKEOFF:
