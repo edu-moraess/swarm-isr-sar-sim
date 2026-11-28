@@ -77,13 +77,13 @@ def step_drone(
     a_max: float = 2.0,
     tol: float = 1.5,
     arrival_speed_mps: float = 0.25,
+    braking: bool = False,
 ) -> None:
-    """Integrate a bounded-acceleration point mass with braking near waypoints.
+    """Integrate the point mass; optional bounded braking is used for landing.
 
-    The desired speed is limited by both cruise speed and a stopping-distance
-    envelope. A waypoint is consumed only after position and speed tolerances
-    are simultaneously satisfied; this avoids carrying high residual velocity
-    through a waypoint.
+    The default path preserves the baseline waypoint-following behavior.
+    With braking=True, desired speed follows a stopping-distance envelope and
+    the waypoint is consumed only after both position and speed tolerances pass.
     """
     if not drone.alive:
         return
@@ -96,24 +96,32 @@ def step_drone(
         target = drone.waypoints[drone.wp_idx]
         err = target - drone.position
         dist = float(np.linalg.norm(err))
-        if dist > 1e-9:
-            direction = err / dist
-            stopping_speed = float(np.sqrt(2.0 * a_max * dist))
-            proportional_speed = 1.5 * dist
-            desired_speed = min(swarm.cruise_mps, stopping_speed, proportional_speed)
-            desired_v = direction * desired_speed
-        else:
-            desired_v = np.zeros(3)
-
-        dv = desired_v - drone.velocity
-        max_dv = a_max * dt
-        dv_norm = float(np.linalg.norm(dv))
-        if dv_norm > max_dv:
-            dv = dv / dv_norm * max_dv
-        drone.velocity = drone.velocity + dv
-
-        if dist <= tol and float(np.linalg.norm(drone.velocity)) <= arrival_speed_mps:
+        if braking:
+            if dist > 1e-9:
+                direction = err / dist
+                stopping_speed = float(np.sqrt(2.0 * a_max * dist))
+                proportional_speed = 1.5 * dist
+                desired_speed = min(swarm.cruise_mps, stopping_speed, proportional_speed)
+                desired_v = direction * desired_speed
+            else:
+                desired_v = np.zeros(3)
+            dv = desired_v - drone.velocity
+            max_dv = a_max * dt
+            dv_norm = float(np.linalg.norm(dv))
+            if dv_norm > max_dv:
+                dv = dv / dv_norm * max_dv
+            drone.velocity = drone.velocity + dv
+            if dist <= tol and float(np.linalg.norm(drone.velocity)) <= arrival_speed_mps:
+                drone.wp_idx += 1
+        elif dist < tol:
             drone.wp_idx += 1
+        else:
+            desired_v = err / max(dist, 1e-6) * min(swarm.cruise_mps, dist / dt)
+            dv = desired_v - drone.velocity
+            max_dv = a_max * dt
+            if np.linalg.norm(dv) > max_dv:
+                dv = dv / np.linalg.norm(dv) * max_dv
+            drone.velocity = drone.velocity + dv
     else:
         drone.velocity *= 0.9
 
