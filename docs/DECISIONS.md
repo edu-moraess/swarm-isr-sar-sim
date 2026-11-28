@@ -89,3 +89,14 @@ Formato curto: Contexto → Decisão → Alternativas → Consequência.
 **Allowlist temporária e escopo**: os sete módulos legados atualmente inventariados são `mission.py`, `drone.py`, `sensors.py`, `energy.py`, `planning/boustrophedon.py`, `planning/frontier.py` e `planning/sectors.py`. O scanner AST percorre esses arquivos também; cada entrada permite somente categorias específicas e documentadas de acoplamento legado, não a exclusão integral do arquivo. O scanner identifica imports diretos/alias de `swarm_core.world`, referências a `World`, acessos a atributos `.world`, imports de `PhysicalTruthState` e acessos a `drone.position`/equivalentes encadeados. A detecção AST é uma barreira estática direcionada, não uma prova formal contra reflexão ou aliases arbitrários.
 
 **Consequência**: P2.0 cria contratos imutáveis e barreiras de regressão sem alterar a dinâmica, o fluxo de observações, o Gossip ou o EventLog. A allowlist deve ser reduzida conforme os módulos migram; sua ampliação exige justificativa. A existência dos contratos não significa que a arquitetura Dual-World já esteja integralmente migrada.
+
+
+## ADR-010 — Per-agent local state estimation (P2.1)
+
+**Contexto**: A migração Dual-World precisa impedir que componentes de agente dependam diretamente dos objetos físicos `Drone` e `World`. O primeiro corte deve criar uma fronteira local testável sem alterar ainda o loop da missão ou o modelo de sensores.
+
+**Decisão**: Introduzir `LocalStateEstimator`, uma instância por agente que recebe somente posição reportada, timestamp e bateria reportada. A velocidade estimada é calculada por diferença finita entre amostras reportadas; a primeira amostra usa velocidade zero por ausência de histórico. Cada atualização produz um `AgentLocalState` imutável. Timestamps precisam ser estritamente crescentes; amostras inválidas não avançam o histórico.
+
+**Limites**: O estimador não acessa `Drone`, `World`, posição física verdadeira, sensores ou rede. A posição reportada deve ser fornecida pelo adaptador chamador. A velocidade é uma estimativa simples por diferença finita, sem filtro ou modelo de incerteza. Esta etapa ainda não migra `MissionLoop`, planejamento, sensores ou Gossip para Dual-World.
+
+**Consequência**: P2.1 começa com uma projeção local isolada e determinística, validada por testes unitários. A integração com o fluxo de telemetria e a substituição gradual dos acessos físicos serão etapas subsequentes, cada uma com testes de paridade antes de alterar o comportamento da missão.
