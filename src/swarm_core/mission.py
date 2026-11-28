@@ -14,13 +14,13 @@ from dataclasses import dataclass
 import numpy as np
 
 from swarm_core.clock import SimClock
-from swarm_core.contracts import AgentLocalState
 from swarm_core.config import (
     MissionConfig,
     NetworkConfig,
     PerceptionConfig,
     SwarmConfig,
 )
+from swarm_core.contracts import AgentLocalState
 from swarm_core.drone import Drone, create_drones, step_drone
 from swarm_core.events import EventLog
 from swarm_core.fsm import MissionFSM
