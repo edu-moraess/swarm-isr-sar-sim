@@ -20,6 +20,7 @@ from swarm_core.config import (
     PerceptionConfig,
     SwarmConfig,
 )
+from swarm_core.contracts import AgentLocalState
 from swarm_core.drone import Drone, create_drones, step_drone
 from swarm_core.events import EventLog
 from swarm_core.fsm import MissionFSM
@@ -29,6 +30,7 @@ from swarm_core.network import make_network
 from swarm_core.planning.boustrophedon import boustrophedon_waypoints
 from swarm_core.rng import RNGManager
 from swarm_core.sensors import sense
+from swarm_core.telemetry import AgentTelemetryAdapter
 from swarm_core.world import World, build_world
 
 
@@ -99,6 +101,10 @@ class MissionLoop:
 
         self.world: World = build_world(mission, world_rng, obstacle_fraction=obstacle_fraction)
         self.drones: list[Drone] = create_drones(swarm, mission.base, drone_rng)
+        self.telemetry_adapters = {
+            drone.id: AgentTelemetryAdapter(source_id=drone.id) for drone in self.drones
+        }
+        self.agent_local_states: dict[int, AgentLocalState] = {}
         self.network = make_network(self.network_config, network_profile, network_rng)
         self.gossip: GossipSwarm = make_gossip_swarm(
             [drone.id for drone in self.drones],
@@ -115,6 +121,15 @@ class MissionLoop:
     @property
     def finished(self) -> bool:
         return self.fsm.phase == MissionPhase.COMPLETE
+
+    def _capture_agent_local_states(self) -> None:
+        """Capture agent-facing snapshots from reported telemetry only."""
+        for drone in self.drones:
+            self.agent_local_states[drone.id] = self.telemetry_adapters[drone.id].update(
+                timestamp_s=self.clock.t,
+                reported_position=drone.reported_position(),
+                battery_pct=drone.battery_pct,
+            )
 
     def _emit_phase(self, event: str) -> None:
         previous = self.fsm.phase
@@ -186,6 +201,7 @@ class MissionLoop:
                 drone,
                 [np.array([drone.position[0], drone.position[1], altitude])],
             )
+        self._capture_agent_local_states()
         self.events.emit(
             self.clock.t,
             "mission_started",
@@ -299,6 +315,8 @@ class MissionLoop:
                 arrival_speed_mps=0.15 if landing_phase else 0.25,
                 braking=landing_phase,
             )
+
+        self._capture_agent_local_states()
 
         if self.fsm.phase == MissionPhase.TAKEOFF:
             if all(

@@ -100,3 +100,14 @@ Formato curto: Contexto → Decisão → Alternativas → Consequência.
 **Limites**: O estimador não acessa `Drone`, `World`, posição física verdadeira, sensores ou rede. A posição reportada deve ser fornecida pelo adaptador chamador. A velocidade é uma estimativa simples por diferença finita, sem filtro ou modelo de incerteza. Esta etapa ainda não migra `MissionLoop`, planejamento, sensores ou Gossip para Dual-World.
 
 **Consequência**: P2.1 começa com uma projeção local isolada e determinística, validada por testes unitários. A integração com o fluxo de telemetria e a substituição gradual dos acessos físicos serão etapas subsequentes, cada uma com testes de paridade antes de alterar o comportamento da missão.
+
+## ADR-011 — Runtime bridge for agent-local telemetry (P2.1)
+
+**Contexto**: O estimador local já existe, mas ainda não recebe amostras durante a execução de uma missão. É necessário ligar a telemetria reportada ao contrato local sem permitir que o adaptador leia diretamente os objetos físicos do simulador.
+
+**Decisão**: Introduzir `AgentTelemetryAdapter`, que recebe uma mensagem `Point`, timestamp e bateria reportada, e delega a projeção ao `LocalStateEstimator`. O `MissionLoop` mantém uma instância por drone e atualiza `agent_local_states` no início (t=0) e após cada passo de dinâmica, usando `Drone.reported_position()`. O adaptador não importa nem acessa `Drone` ou `World`.
+
+**Separação preservada**: A dinâmica e a simulação física continuam usando o estado verdadeiro. O modelo de sensores continua usando a pose física para simular onde o sensor realmente se encontra; os snapshots locais são uma representação separada, construída a partir do GPS reportado. Nesta etapa nenhum planejador, sensor, Gossip ou decisão de missão consome os snapshots locais.
+
+**Consequência**: A telemetria local passa a existir no runtime, por agente e com histórico temporal independente, sem alterar RNG, eventos ou fluxo de missão. A paridade do EventLog e do resultado de missão deve ser verificada no Colab. A bateria ainda é fornecida pelo valor reportado atual do simulador, sem ruído ou atraso; o estimador de velocidade permanece uma diferença finita simples.
+
