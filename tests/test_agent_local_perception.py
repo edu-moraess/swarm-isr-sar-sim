@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from swarm_core.config import AreaConfig, MissionConfig, PerceptionConfig, TargetsConfig
+from swarm_core.config import PerceptionConfig
 from swarm_core.contracts import AgentLocalState
 from swarm_core.messages import Point
 from swarm_core.rng import RNGManager
@@ -104,3 +104,47 @@ def test_sense_rejects_mutable_or_invalid_agent_state_contract() -> None:
         assert "immutable 3-value tuple" in str(exc)
     else:
         raise AssertionError("mutable pose must not cross the perception boundary")
+
+
+
+def test_mission_routes_latest_local_snapshot_to_sensor(monkeypatch) -> None:
+    from swarm_core.config import (
+        AreaConfig,
+        MissionConfig,
+        SwarmConfig,
+        TargetsConfig,
+    )
+    from swarm_core.mission import MissionLoop
+    from swarm_core.messages import ObservationBatch
+
+    mission = MissionConfig(
+        mission_id="local_perception_test",
+        seed=5,
+        area=AreaConfig(size_m=[40.0, 40.0], cell_m=5.0),
+        base=[2.5, 2.5],
+        targets=TargetsConfig(count=0, clutter=0),
+    )
+    loop = MissionLoop(
+        mission=mission,
+        swarm=SwarmConfig(n_drones=1),
+        perception=PerceptionConfig(),
+        obstacle_fraction=0.0,
+    )
+    loop.start()
+    captured = []
+
+    def fake_sense(agent_state, world, cfg, timestamp_s, rng):
+        captured.append(agent_state)
+        return ObservationBatch(
+            drone_id=agent_state.source_id,
+            seq=1,
+            timestamp=timestamp_s,
+            observations=[],
+        )
+
+    monkeypatch.setattr("swarm_core.mission.sense", fake_sense)
+    loop._sense_and_share()
+
+    assert len(captured) == 1
+    assert captured[0] is loop.agent_local_states[loop.drones[0].id]
+    assert isinstance(captured[0], AgentLocalState)
