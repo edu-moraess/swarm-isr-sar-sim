@@ -78,3 +78,14 @@ Formato curto: Contexto → Decisão → Alternativas → Consequência.
 **Alternativas**: Flood completo em todo ciclo; estado de sincronização centralizado fora dos nós; ACK por lote individual.
 
 **Consequência**: O mecanismo reduz retransmissões redundantes e recupera perdas por repetição idempotente. O modelo de ACK é simulado pelo NetworkSim e não representa ainda um protocolo de transporte distribuído em produção. Testes devem cobrir progresso independente por peer, perda de lote, perda de ACK, partições e convergência.
+
+
+## ADR-009 — Dual-World state contracts (P2.0)
+
+**Contexto**: O baseline mistura estado físico verdadeiro, estado estimado do agente e crenças probabilísticas locais. Essa mistura permite que código de agente ou planejador leia acidentalmente a posição verdadeira do drone ou o objeto `World`.
+
+**Decisão**: Introduzir `PhysicalTruthState`, `AgentLocalState` e `BeliefSnapshot` como dataclasses congeladas, com vetores e coleções representados por tuplas imutáveis. `PhysicalTruthState` é reservado ao núcleo físico e à avaliação; agentes e planejadores devem consumir `AgentLocalState` e `BeliefSnapshot`. Testes AST bloqueiam novos imports/referências ao mundo físico e acessos diretos a `drone.position`.
+
+**Allowlist temporária**: `mission.py`, `drone.py`, `sensors.py` e `planning/boustrophedon.py` permanecem legados. Os três primeiros serão migrados em P2.1/P2.2; o planejador de cobertura será migrado em P2.2. A allowlist é explícita e deve ser reduzida, nunca ampliada sem justificativa documentada.
+
+**Consequência**: P2.0 cria contratos e barreiras de regressão sem alterar a dinâmica, o fluxo de observações, o Gossip ou o EventLog. A existência dos contratos não significa que a arquitetura Dual-World já esteja integralmente migrada.
