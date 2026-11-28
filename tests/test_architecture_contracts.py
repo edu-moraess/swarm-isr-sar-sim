@@ -78,12 +78,14 @@ class BoundaryVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if node.module == "swarm_core.world":
+        if node.module == "swarm_core.world" or (
+            node.module == "swarm_core" and any(alias.name == "world" for alias in node.names)
+        ):
             self._add("physical_world_import", node, "import from swarm_core.world")
         if node.module == "swarm_core.contracts":
             for alias in node.names:
-                if alias.name == "PhysicalTruthState":
-                    self._add("physical_truth_contract_import", node, "agent imports PhysicalTruthState")
+                if alias.name in {"PhysicalTruthState", "*"}:
+                    self._add("physical_truth_contract_import", node, "agent imports PhysicalTruthState or wildcard contracts")
         self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign) -> None:
@@ -104,6 +106,8 @@ class BoundaryVisitor(ast.NodeVisitor):
         chain = _attribute_chain(node)
         if node.attr == "world":
             self._add("physical_world_access", node, "attribute access to .world")
+        if node.attr == "PhysicalTruthState" and "contracts" in chain:
+            self._add("physical_truth_contract_import", node, "agent accesses contracts.PhysicalTruthState")
         if node.attr == "position" and chain.intersection(self.agent_aliases):
             self._add("true_position_access", node, "agent/drone true position access")
         self.generic_visit(node)
@@ -213,6 +217,9 @@ def test_legacy_allowlist_is_explicit_and_category_scoped() -> None:
         ("uav = drone\nuav.position", "true_position_access"),
         ("World()", "physical_world_reference"),
         ("from swarm_core.contracts import PhysicalTruthState as Truth", "physical_truth_contract_import"),
+        ("from swarm_core import world as physical_world", "physical_world_import"),
+        ("import swarm_core.contracts as contracts\\ncontracts.PhysicalTruthState", "physical_truth_contract_import"),
+        ("from swarm_core.contracts import *", "physical_truth_contract_import"),
     ],
 )
 def test_ast_guard_detects_aliases_and_chained_access(source: str, expected_category: str) -> None:
