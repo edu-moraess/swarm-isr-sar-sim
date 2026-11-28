@@ -153,7 +153,7 @@ def sense(
         )
 
     return ObservationBatch(
-        drone_id=drone.id,
+        drone_id=agent_state.source_id,
         seq=seq,
         timestamp=t,
         observations=obs_list,
