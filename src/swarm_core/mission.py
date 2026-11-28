@@ -27,6 +27,7 @@ from swarm_core.fsm import MissionFSM
 from swarm_core.gossip import GossipSwarm, make_gossip_swarm
 from swarm_core.messages import MissionPhase
 from swarm_core.network import make_network
+from swarm_core.planning.agent_assignment import assign_route_lanes
 from swarm_core.planning.boustrophedon import boustrophedon_waypoints
 from swarm_core.rng import RNGManager
 from swarm_core.sensors import sense
@@ -216,10 +217,9 @@ class MissionLoop:
         route = boustrophedon_waypoints(self.world, altitude=self.swarm_config.search_alt_m)
         if not route:
             raise RuntimeError("Coverage planner produced no free-cell waypoints")
-        for index, drone in enumerate(self.drones):
-            assigned = route[index :: len(self.drones)]
-            if not assigned:
-                assigned = [route[index % len(route)]]
+        assignments = assign_route_lanes(route, self.agent_local_states)
+        for drone in self.drones:
+            assigned = assignments[drone.id]
             points = [np.array([point.x, point.y, point.z], dtype=float) for point in assigned]
             self._assign_waypoints(drone, points)
         self.events.emit(
