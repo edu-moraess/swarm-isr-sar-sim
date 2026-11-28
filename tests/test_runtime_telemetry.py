@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 import numpy as np
 
 from swarm_core.config import (
@@ -142,3 +145,24 @@ def test_runtime_local_state_updates_from_reported_telemetry() -> None:
     )
     assert np.allclose(current.estimated_velocity_xyz_mps, expected_velocity)
     assert current.battery_pct == drone.battery_pct
+
+
+
+def test_telemetry_adapter_has_no_physical_simulator_dependency() -> None:
+    source = Path("src/swarm_core/telemetry.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    imported_modules = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    imported_modules.update(
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module is not None
+    )
+
+    assert "swarm_core.drone" not in imported_modules
+    assert "swarm_core.world" not in imported_modules
+    assert "swarm_core.agent_state" in imported_modules
