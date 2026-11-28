@@ -6,7 +6,7 @@ import numpy as np
 from numpy.random import Generator
 
 from swarm_core.config import PerceptionConfig
-from swarm_core.drone import Drone
+from swarm_core.contracts import AgentLocalState
 from swarm_core.messages import Observation, ObservationBatch
 from swarm_core.world import CellState, World
 
@@ -62,9 +62,11 @@ def line_of_sight(world: World, from_idx: int, to_idx: int) -> bool:
     return True
 
 
-def cells_in_footprint(world: World, drone: Drone, radius: float) -> list[int]:
-    """Iterate only the bounding rectangle around the drone."""
-    cx, cy = float(drone.position[0]), float(drone.position[1])
+def cells_in_footprint(
+    world: World, position_xyz_m: tuple[float, float, float], radius: float
+) -> list[int]:
+    """Iterate the footprint around an agent-reported position."""
+    cx, cy = float(position_xyz_m[0]), float(position_xyz_m[1])
     cell = world.cell_m
     r_cells = int(np.ceil(radius / cell)) + 1
     col0 = max(0, int((cx - world.origin.x) / cell) - r_cells)
@@ -101,21 +103,26 @@ def sensitivity(dist: float, radius: float, s0: float = 0.92) -> float:
 
 
 def sense(
-    drone: Drone,
+    agent_state: AgentLocalState,
     world: World,
     cfg: PerceptionConfig,
     t: float,
     rng: Generator,
 ) -> ObservationBatch:
-    """Produce an ObservationBatch for all cells in the current footprint."""
-    alt = float(drone.position[2])
+    """Produce observations using only the agent-local estimated pose.
+
+    World remains the environment/evaluation model (free cells, occlusion,
+    target and clutter labels); the sensor geometry never reads true drone pose.
+    """
+    position = agent_state.estimated_position_xyz_m
+    alt = float(position[2])
     radius = footprint_radius(alt, cfg)
-    cells = cells_in_footprint(world, drone, radius)
+    cells = cells_in_footprint(world, position, radius)
     s0 = cfg.detector.sensitivity
     f = cfg.detector.false_alarm
 
-    seq = world.sensor_sequences.get(drone.id, 0) + 1
-    world.sensor_sequences[drone.id] = seq
+    seq = world.sensor_sequences.get(agent_state.source_id, 0) + 1
+    world.sensor_sequences[agent_state.source_id] = seq
 
     target_cells = {tg.cell_idx for tg in world.targets}
     clutter_cells = {c.cell_idx for c in world.clutter}
@@ -123,7 +130,7 @@ def sense(
     obs_list: list[Observation] = []
     for cell in cells:
         x, y = world.idx_to_xy(cell)
-        dist = float(np.hypot(x - drone.position[0], y - drone.position[1]))
+        dist = float(np.hypot(x - position[0], y - position[1]))
         s = sensitivity(dist, radius, s0)
 
         if cell in target_cells:
@@ -135,7 +142,7 @@ def sense(
 
         obs_list.append(
             Observation(
-                drone_id=drone.id,
+                drone_id=agent_state.source_id,
                 seq=seq,
                 cell_idx=cell,
                 detected=detected,
