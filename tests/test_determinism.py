@@ -8,6 +8,7 @@ from swarm_core.drone import create_drones, step_drone
 from swarm_core.events import EventLog
 from swarm_core.rng import RNGManager
 from swarm_core.sensors import sense
+from swarm_core.telemetry import AgentTelemetryAdapter
 from swarm_core.world import build_world
 
 
@@ -22,6 +23,10 @@ def _run_short(seed: int) -> str:
     perc = PerceptionConfig()
     world = build_world(mission, world_rng)
     drones = create_drones(swarm, mission.base, drone_rng)
+    telemetry = {
+        drone.id: AgentTelemetryAdapter(source_id=drone.id)
+        for drone in drones
+    }
     clock = SimClock(dt=0.1)
     log = EventLog()
 
@@ -31,7 +36,12 @@ def _run_short(seed: int) -> str:
         for d in drones:
             step_drone(d, clock.dt, swarm, swarm.battery, world, perc.gps_sigma_m, drone_rng)
             if step % 5 == 0:
-                batch = sense(d, world, perc, t, sensor_rng)
+                local_state = telemetry[d.id].update(
+                    timestamp_s=t,
+                    reported_position=d.reported_position(),
+                    battery_pct=d.battery_pct,
+                )
+                batch = sense(local_state, world, perc, t, sensor_rng)
                 log.emit(t, "sense", drone_id=d.id, n_obs=len(batch.observations), seq=batch.seq)
         log.emit(t, "tick", step=clock.step)
 
