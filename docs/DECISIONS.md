@@ -78,3 +78,14 @@ Formato curto: Contexto → Decisão → Alternativas → Consequência.
 **Alternativas**: Flood completo em todo ciclo; estado de sincronização centralizado fora dos nós; ACK por lote individual.
 
 **Consequência**: O mecanismo reduz retransmissões redundantes e recupera perdas por repetição idempotente. O modelo de ACK é simulado pelo NetworkSim e não representa ainda um protocolo de transporte distribuído em produção. Testes devem cobrir progresso independente por peer, perda de lote, perda de ACK, partições e convergência.
+
+
+## ADR-009 — Dual-World state contracts (P2.0)
+
+**Contexto**: O baseline mistura estado físico verdadeiro, estado estimado do agente e crenças probabilísticas locais. Essa mistura permite que código de agente ou planejador leia acidentalmente a posição verdadeira do drone ou o objeto `World`.
+
+**Decisão**: Introduzir `PhysicalTruthState`, `AgentLocalState` e `BeliefSnapshot` como dataclasses congeladas. Vetores, probabilidades e coleções usam tuplas; a construção valida recursivamente tipos, comprimentos, valores numéricos finitos, limites de probabilidade e conteúdo dos estados/watermarks aninhados. `PhysicalTruthState` é reservado ao núcleo físico e à avaliação; agentes e planejadores devem consumir `AgentLocalState` e `BeliefSnapshot`.
+
+**Allowlist temporária e escopo**: os sete módulos legados atualmente inventariados são `mission.py`, `drone.py`, `sensors.py`, `energy.py`, `planning/boustrophedon.py`, `planning/frontier.py` e `planning/sectors.py`. O scanner AST percorre esses arquivos também; cada entrada permite somente categorias específicas e documentadas de acoplamento legado, não a exclusão integral do arquivo. O scanner identifica imports diretos/alias de `swarm_core.world`, referências a `World`, acessos a atributos `.world`, imports de `PhysicalTruthState` e acessos a `drone.position`/equivalentes encadeados. A detecção AST é uma barreira estática direcionada, não uma prova formal contra reflexão ou aliases arbitrários.
+
+**Consequência**: P2.0 cria contratos imutáveis e barreiras de regressão sem alterar a dinâmica, o fluxo de observações, o Gossip ou o EventLog. A allowlist deve ser reduzida conforme os módulos migram; sua ampliação exige justificativa. A existência dos contratos não significa que a arquitetura Dual-World já esteja integralmente migrada.
