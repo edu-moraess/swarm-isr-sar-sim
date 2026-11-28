@@ -218,7 +218,7 @@ def test_legacy_allowlist_is_explicit_and_category_scoped() -> None:
         ("World()", "physical_world_reference"),
         ("from swarm_core.contracts import PhysicalTruthState as Truth", "physical_truth_contract_import"),
         ("from swarm_core import world as physical_world", "physical_world_import"),
-        ("import swarm_core.contracts as contracts\\ncontracts.PhysicalTruthState", "physical_truth_contract_import"),
+        ("import swarm_core.contracts as contracts\ncontracts.PhysicalTruthState", "physical_truth_contract_import"),
         ("from swarm_core.contracts import *", "physical_truth_contract_import"),
     ],
 )
