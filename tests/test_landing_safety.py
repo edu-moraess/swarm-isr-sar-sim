@@ -32,6 +32,11 @@ def test_landing_pads_are_deterministic_and_separated() -> None:
         for j in range(i + 1, len(positions))
     ]
     assert min(distances) >= 3.0
+    assert all(
+        0.0 <= float(position[0]) <= loop.mission_config.area.size_m[0]
+        and 0.0 <= float(position[1]) <= loop.mission_config.area.size_m[1]
+        for position in positions
+    )
 
 
 def test_landing_completion_requires_position_and_velocity_tolerances() -> None:
@@ -83,6 +88,7 @@ def test_point_mass_brakes_and_settles_before_consuming_landing_waypoint() -> No
             rng=rng,
             tol=0.20,
             arrival_speed_mps=0.15,
+            braking=True,
         )
         if drone.wp_idx == 1:
             break
